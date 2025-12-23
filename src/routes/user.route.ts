@@ -6,7 +6,8 @@ import {
   updateUserAccount,
   deleteUserAccount,
   updateMyProfile,
-  deleteMyAccount
+  deleteMyAccount,
+  getUserProfile
 } from '../controllers/user.controller';
 import { upload } from '../config/cloudinary';
 
@@ -22,5 +23,7 @@ router.post('/', createUser);
 
 router.put('/:id', updateUserAccount);
 router.delete('/:id', deleteUserAccount);
+
+router.get('/profile/:id', getUserProfile);
 
 export default router;

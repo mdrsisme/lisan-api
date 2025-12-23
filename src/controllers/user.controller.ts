@@ -274,3 +274,27 @@ export const getUserStats = async (req: Request, res: Response) => {
     return sendError(res, 'Gagal mengambil statistik', 500, error);
   }
 };
+
+
+export const getUserProfile = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) return sendError(res, 'User ID diperlukan', 400);
+
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, email, username, full_name, role, level, xp, is_verified, created_at, updated_at')
+      .eq('id', id)
+      .single();
+
+    if (error || !user) {
+      return sendError(res, 'User tidak ditemukan', 404);
+    }
+
+    return sendSuccess(res, 'Data user ditemukan', user);
+
+  } catch (error: any) {
+    return sendError(res, 'Gagal mengambil data user', 500, error);
+  }
+};
