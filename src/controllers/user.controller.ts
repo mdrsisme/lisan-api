@@ -6,12 +6,13 @@ import { sendSuccess, sendError } from '../utils/apiResponse';
 export const updateProfile = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const { username, score, level, is_verified, is_premium } = req.body;
+    const { username, full_name, xp, level, is_verified, is_premium } = req.body;
     
     let updateData: any = {};
 
     if (username) updateData.username = username;
-    if (score !== undefined) updateData.score = score;
+    if (full_name) updateData.full_name = full_name;
+    if (xp !== undefined) updateData.xp = xp;
     if (level !== undefined) updateData.level = level;
     if (is_verified !== undefined) updateData.is_verified = is_verified;
     if (is_premium !== undefined) updateData.is_premium = is_premium;
@@ -35,8 +36,7 @@ export const updateProfile = async (req: Request, res: Response) => {
 
     if (error) throw error;
 
-    delete data.password;
-    delete data.verification_code;
+    delete data.password_hash;
 
     return sendSuccess(res, 'Update berhasil', data);
 
@@ -52,20 +52,20 @@ export const updatePassword = async (req: Request, res: Response) => {
 
     const { data: user } = await supabase
       .from('users')
-      .select('password')
+      .select('password_hash')
       .eq('id', userId)
       .single();
     
     if (!user) return sendError(res, 'User tidak ditemukan', 404);
 
-    const isMatch = await comparePassword(oldPassword, user.password);
+    const isMatch = await comparePassword(oldPassword, user.password_hash);
     if (!isMatch) return sendError(res, 'Password lama salah', 401);
 
     const hashedNewPassword = await hashPassword(newPassword);
     
     const { error } = await supabase
       .from('users')
-      .update({ password: hashedNewPassword, updated_at: new Date() })
+      .update({ password_hash: hashedNewPassword, updated_at: new Date() })
       .eq('id', userId);
 
     if (error) throw error;
@@ -80,6 +80,9 @@ export const updatePassword = async (req: Request, res: Response) => {
 export const deleteAccount = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
+
+    await supabase.from('tokens').delete().eq('user_id', userId);
+    
     const { error } = await supabase.from('users').delete().eq('id', userId);
 
     if (error) throw error;
@@ -97,14 +100,14 @@ export const getUsers = async (req: Request, res: Response) => {
     let query = supabase.from('users').select('*', { count: 'exact' });
 
     if (search) {
-      query = query.or(`email.ilike.%${search}%,username.ilike.%${search}%`);
+      query = query.or(`email.ilike.%${search}%,username.ilike.%${search}%,full_name.ilike.%${search}%`);
     }
 
     if (role) {
       query = query.eq('role', role);
     }
 
-    const allowedSorts = ['created_at', 'updated_at', 'level', 'score', 'username', 'email'];
+    const allowedSorts = ['created_at', 'updated_at', 'level', 'xp', 'username', 'email'];
     const sortField = allowedSorts.includes(sortBy as string) ? (sortBy as string) : 'created_at';
     
     query = query.order(sortField, { ascending: order === 'asc' });
@@ -118,8 +121,7 @@ export const getUsers = async (req: Request, res: Response) => {
 
     if (data) {
       data.forEach(u => {
-        delete u.password;
-        delete u.verification_code;
+        delete u.password_hash;
       });
     }
 
@@ -139,14 +141,12 @@ export const getUserStats = async (req: Request, res: Response) => {
       { count: totalUsers },
       { count: verifiedUsers },
       { count: premiumUsers },
-      { count: admins },
-      { count: teachers }
+      { count: admins }
     ] = await Promise.all([
       supabase.from('users').select('*', { count: 'exact', head: true }),
       supabase.from('users').select('*', { count: 'exact', head: true }).eq('is_verified', true),
       supabase.from('users').select('*', { count: 'exact', head: true }).eq('is_premium', true),
-      supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'admin'),
-      supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'teacher'),
+      supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'admin')
     ]);
 
     const { count: highLevelUsers } = await supabase
@@ -158,7 +158,7 @@ export const getUserStats = async (req: Request, res: Response) => {
       total: totalUsers,
       verified: verifiedUsers,
       premium: premiumUsers,
-      byRole: { admin: admins, teacher: teachers },
+      admins: admins,
       highLevel: highLevelUsers
     });
 

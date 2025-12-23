@@ -7,7 +7,7 @@ import { sendSuccess, sendError } from '../utils/apiResponse';
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, username, password, role } = req.body;
+    const { email, username, password, full_name, role } = req.body;
 
     const { data: existingUser } = await supabase
       .from('users')
@@ -20,32 +20,49 @@ export const register = async (req: Request, res: Response) => {
       if (existingUser.username === username) return sendError(res, 'Username sudah digunakan', 400);
     }
 
-    const hashedPassword = await hashPassword(password);
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const password_hash = await hashPassword(password);
 
-    const { error } = await supabase
+    const { data: newUser, error: userError } = await supabase
       .from('users')
       .insert({
         email,
         username,
-        password: hashedPassword,
-        verification_code: verificationCode,
+        full_name: full_name || username,
+        password_hash,
         is_verified: false,
         role: role || 'user',
         level: 1,
-        score: 0
+        xp: 0
+      })
+      .select()
+      .single();
+
+    if (userError) throw userError;
+
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24);
+
+    const { error: tokenError } = await supabase
+      .from('tokens')
+      .insert({
+        user_id: newUser.id,
+        token: verificationCode,
+        type: 'verification',
+        expires_at: expiresAt.toISOString(),
+        is_used: false
       });
 
-    if (error) throw error;
+    if (tokenError) throw tokenError;
 
     await resend.emails.send({
       from: 'onboarding@resend.dev',
       to: email,
       subject: 'Kode Verifikasi Lisan',
-      html: `<p>Kode Anda: <strong>${verificationCode}</strong></p>`
+      html: `<p>Kode verifikasi Anda: <strong>${verificationCode}</strong></p>`
     });
 
-    return sendSuccess(res, 'Registrasi berhasil', { email, role: role || 'user' });
+    return sendSuccess(res, 'Registrasi berhasil', { email });
 
   } catch (error: any) {
     return sendError(res, 'Gagal registrasi', 500, error);
@@ -58,20 +75,34 @@ export const verifyAccount = async (req: Request, res: Response) => {
 
     const { data: user } = await supabase
       .from('users')
-      .select('*')
+      .select('id, is_verified')
       .eq('email', email)
       .single();
 
     if (!user) return sendError(res, 'User tidak ditemukan', 404);
     if (user.is_verified) return sendError(res, 'Akun sudah diverifikasi', 400);
-    if (user.verification_code !== code) return sendError(res, 'Kode salah', 400);
 
-    const { error } = await supabase
+    const { data: tokenData } = await supabase
+      .from('tokens')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('token', code)
+      .eq('type', 'verification')
+      .eq('is_used', false)
+      .gt('expires_at', new Date().toISOString())
+      .single();
+
+    if (!tokenData) return sendError(res, 'Kode salah atau kadaluwarsa', 400);
+
+    await supabase
       .from('users')
-      .update({ is_verified: true, verification_code: null })
+      .update({ is_verified: true, updated_at: new Date() })
       .eq('id', user.id);
 
-    if (error) throw error;
+    await supabase
+      .from('tokens')
+      .update({ is_used: true })
+      .eq('id', tokenData.id);
 
     return sendSuccess(res, 'Verifikasi berhasil');
 
@@ -86,33 +117,45 @@ export const sendVerificationCode = async (req: Request, res: Response) => {
 
     const { data: user } = await supabase
       .from('users')
-      .select('id, is_verified, username')
+      .select('id, is_verified, full_name')
       .eq('email', email)
       .single();
 
     if (!user) return sendError(res, 'Email tidak terdaftar', 404);
-    if (user.is_verified) return sendError(res, 'Akun sudah diverifikasi sebelumnya', 400);
+    if (user.is_verified) return sendError(res, 'Akun sudah diverifikasi', 400);
+
+    await supabase
+      .from('tokens')
+      .update({ is_used: true })
+      .eq('user_id', user.id)
+      .eq('type', 'verification');
 
     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24);
 
     const { error } = await supabase
-      .from('users')
-      .update({ verification_code: newCode })
-      .eq('id', user.id);
+      .from('tokens')
+      .insert({
+        user_id: user.id,
+        token: newCode,
+        type: 'verification',
+        expires_at: expiresAt.toISOString()
+      });
 
     if (error) throw error;
 
     await resend.emails.send({
       from: 'onboarding@resend.dev',
       to: email,
-      subject: 'Kode Verifikasi Baru Lisan',
-      html: `<p>Halo ${user.username}, kode baru Anda: <strong>${newCode}</strong></p>`
+      subject: 'Kode Verifikasi Baru',
+      html: `<p>Halo ${user.full_name}, kode baru Anda: <strong>${newCode}</strong></p>`
     });
 
-    return sendSuccess(res, 'Kode verifikasi baru telah dikirim');
+    return sendSuccess(res, 'Kode baru dikirim');
 
   } catch (error: any) {
-    return sendError(res, 'Gagal mengirim kode', 500, error);
+    return sendError(res, 'Gagal kirim kode', 500, error);
   }
 };
 
@@ -128,7 +171,7 @@ export const login = async (req: Request, res: Response) => {
 
     if (!user) return sendError(res, 'Akun tidak ditemukan', 404);
 
-    const isMatch = await comparePassword(password, user.password);
+    const isMatch = await comparePassword(password, user.password_hash);
     if (!isMatch) return sendError(res, 'Password salah', 401);
 
     if (!user.is_verified) return sendError(res, 'Akun belum diverifikasi', 403);
@@ -139,8 +182,7 @@ export const login = async (req: Request, res: Response) => {
       email: user.email
     });
 
-    delete user.password;
-    delete user.verification_code;
+    delete user.password_hash;
 
     return sendSuccess(res, 'Login berhasil', { token, user });
 
