@@ -1,31 +1,150 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/database';
-import { hashPassword, comparePassword } from '../utils/password';
+import { hashPassword } from '../utils/password';
 import { sendSuccess, sendError } from '../utils/apiResponse';
-import { User, Token, AuthPayload } from '../types/user';
+import { User, AuthPayload } from '../types/user';
 
-export const updateProfile = async (req: Request, res: Response) => {
+export const createUser = async (req: Request, res: Response) => {
   try {
-    const userPayload = (req as any).user as AuthPayload;
-    const userId = userPayload.id;
+    const { email, password, full_name, username, role = 'user' } = req.body;
+
+    if (!email || !password || !username) {
+      return sendError(res, 'Email, Password, dan Username wajib diisi', 400);
+    }
+
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .or(`email.eq.${email},username.eq.${username}`)
+      .single();
+
+    if (existingUser) {
+      return sendError(res, 'Email atau Username sudah terdaftar', 409);
+    }
+
+    const hashedPassword = await hashPassword(password);
+
+    const newUser = {
+      email,
+      password_hash: hashedPassword,
+      full_name,
+      username,
+      role,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      is_verified: false,
+      is_premium: false,
+      level: 1,
+      xp: 0
+    };
+
+    const { data, error } = await supabase
+      .from('users')
+      .insert(newUser)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const userResult = data as User;
+    // @ts-ignore
+    delete userResult.password_hash;
+
+    return sendSuccess(res, 'User berhasil dibuat', userResult, 201);
+
+  } catch (error: any) {
+    return sendError(res, 'Gagal membuat user baru', 500, error);
+  }
+};
+
+export const getUsers = async (req: Request, res: Response) => {
+  try {
+    const { 
+      search, 
+      role, 
+      sortBy = 'created_at', 
+      order = 'desc', 
+      page = 1, 
+      limit = 10,
+      is_premium,
+      is_verified
+    } = req.query;
+
+    let query = supabase.from('users').select('*', { count: 'exact' });
+    if (search) {
+      const searchTerm = `%${search}%`;
+      query = query.or(`email.ilike.${searchTerm},username.ilike.${searchTerm},full_name.ilike.${searchTerm}`);
+    }
+
+    if (role) query = query.eq('role', role);
+    if (is_premium) query = query.eq('is_premium', is_premium === 'true');
+    if (is_verified) query = query.eq('is_verified', is_verified === 'true');
+
+    const allowedSorts = ['created_at', 'updated_at', 'level', 'xp', 'username', 'email', 'full_name'];
+    const sortField = allowedSorts.includes(sortBy as string) ? (sortBy as string) : 'created_at';
+    query = query.order(sortField, { ascending: order === 'asc' });
+
+    const pageNum = Number(page) || 1;
+    const limitNum = Number(limit) || 10;
+    const from = (pageNum - 1) * limitNum;
+    const to = from + limitNum - 1;
     
-    const { username, full_name, xp, level, is_verified, is_premium } = req.body;
-    
-    let updateData: Partial<User> = {};
+    const { data, count, error } = await query.range(from, to);
+
+    if (error) throw error;
+
+    const users = data as User[];
+    if (users) {
+      users.forEach(u => {
+        // @ts-ignore
+        delete u.password_hash;
+      });
+    }
+
+    return sendSuccess(res, 'Data pengguna berhasil diambil', {
+      data: users,
+      meta: {
+        total_data: count,
+        current_page: pageNum,
+        per_page: limitNum,
+        total_pages: count ? Math.ceil(count / limitNum) : 0,
+        has_next: count ? to < count - 1 : false,
+        has_prev: pageNum > 1
+      }
+    });
+
+  } catch (error: any) {
+    return sendError(res, 'Gagal mengambil data pengguna', 500, error);
+  }
+};
+
+export const updateUserAccount = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { 
+      username, full_name, email, 
+      role, is_verified, is_premium, 
+      level, xp, password 
+    } = req.body;
+
+    const updateData: any = {};
 
     if (username) updateData.username = username;
     if (full_name) updateData.full_name = full_name;
-    if (xp !== undefined) updateData.xp = xp;
-    if (level !== undefined) updateData.level = level;
+    if (email) updateData.email = email;
+    
+    if (role) updateData.role = role;
     if (is_verified !== undefined) updateData.is_verified = is_verified;
     if (is_premium !== undefined) updateData.is_premium = is_premium;
+    if (level !== undefined) updateData.level = level;
+    if (xp !== undefined) updateData.xp = xp;
 
-    if (req.file) {
-      updateData.avatar_url = req.file.path; 
+    if (password) {
+      updateData.password_hash = await hashPassword(password);
     }
 
     if (Object.keys(updateData).length === 0) {
-      return sendError(res, 'Tidak ada data update', 400);
+      return sendError(res, 'Tidak ada data yang diubah', 400);
     }
 
     updateData.updated_at = new Date().toISOString();
@@ -33,7 +152,66 @@ export const updateProfile = async (req: Request, res: Response) => {
     const { data, error } = await supabase
       .from('users')
       .update(updateData)
-      .eq('id', userId)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const updatedUser = data;
+    delete updatedUser.password_hash;
+
+    return sendSuccess(res, 'Akun user berhasil diperbarui', updatedUser);
+
+  } catch (error: any) {
+    return sendError(res, 'Gagal memperbarui akun user', 500, error);
+  }
+};
+
+export const deleteUserAccount = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    return sendSuccess(res, 'User berhasil dihapus permanent');
+  } catch (error: any) {
+    return sendError(res, 'Gagal menghapus user', 500, error);
+  }
+};
+
+export const updateMyProfile = async (req: Request, res: Response) => {
+  try {
+    const userPayload = (req as any).user as AuthPayload;
+    const myId = userPayload.id;
+
+    const { username, full_name, email } = req.body;
+    
+    const updateData: Partial<User> = {};
+
+    if (username) updateData.username = username;
+    if (full_name) updateData.full_name = full_name;
+    if (email) updateData.email = email;
+
+    if (req.file) {
+      updateData.avatar_url = req.file.path; 
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return sendError(res, 'Tidak ada data profil yang diubah', 400);
+    }
+
+    updateData.updated_at = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from('users')
+      .update(updateData)
+      .eq('id', myId)
       .select()
       .single();
 
@@ -43,109 +221,28 @@ export const updateProfile = async (req: Request, res: Response) => {
     // @ts-ignore
     delete updatedUser.password_hash;
 
-    return sendSuccess(res, 'Update berhasil', updatedUser);
+    return sendSuccess(res, 'Profil Anda berhasil diperbarui', updatedUser);
 
   } catch (error: any) {
-    return sendError(res, 'Gagal update profil', 500, error);
+    return sendError(res, 'Gagal memperbarui profil Anda', 500, error);
   }
 };
 
-export const updatePassword = async (req: Request, res: Response) => {
+export const deleteMyAccount = async (req: Request, res: Response) => {
   try {
     const userPayload = (req as any).user as AuthPayload;
-    const userId = userPayload.id;
-    
-    const { oldPassword, newPassword } = req.body;
+    const myId = userPayload.id;
 
-    const { data: user } = await supabase
-      .from('users')
-      .select('password_hash')
-      .eq('id', userId)
-      .single();
-    
-    if (!user) return sendError(res, 'User tidak ditemukan', 404);
-
-    const isMatch = await comparePassword(oldPassword, user.password_hash);
-    if (!isMatch) return sendError(res, 'Password lama salah', 401);
-
-    const hashedNewPassword = await hashPassword(newPassword);
-    
     const { error } = await supabase
       .from('users')
-      .update({ 
-        password_hash: hashedNewPassword, 
-        updated_at: new Date().toISOString() 
-      })
-      .eq('id', userId);
+      .delete()
+      .eq('id', myId);
 
     if (error) throw error;
 
-    return sendSuccess(res, 'Password berhasil diubah');
-
+    return sendSuccess(res, 'Akun Anda berhasil dihapus');
   } catch (error: any) {
-    return sendError(res, 'Gagal ubah password', 500, error);
-  }
-};
-
-export const deleteAccount = async (req: Request, res: Response) => {
-  try {
-    const userPayload = (req as any).user as AuthPayload;
-    const userId = userPayload.id;
-
-    await supabase.from('tokens').delete().eq('user_id', userId);
-    
-    const { error } = await supabase.from('users').delete().eq('id', userId);
-
-    if (error) throw error;
-
-    return sendSuccess(res, 'Akun dihapus');
-  } catch (error: any) {
-    return sendError(res, 'Gagal hapus akun', 500, error);
-  }
-};
-
-export const getUsers = async (req: Request, res: Response) => {
-  try {
-    const { search, role, sortBy = 'created_at', order = 'desc', page = 1, limit = 10 } = req.query;
-
-    let query = supabase.from('users').select('*', { count: 'exact' });
-
-    if (search) {
-      query = query.or(`email.ilike.%${search}%,username.ilike.%${search}%,full_name.ilike.%${search}%`);
-    }
-
-    if (role) {
-      query = query.eq('role', role);
-    }
-
-    const allowedSorts = ['created_at', 'updated_at', 'level', 'xp', 'username', 'email'];
-    const sortField = allowedSorts.includes(sortBy as string) ? (sortBy as string) : 'created_at';
-    
-    query = query.order(sortField, { ascending: order === 'asc' });
-
-    const from = ((Number(page) - 1) * Number(limit));
-    const to = from + Number(limit) - 1;
-    
-    const { data, count, error } = await query.range(from, to);
-
-    if (error) throw error;
-
-    const users = data as User[];
-
-    if (users) {
-      users.forEach(u => {
-        // @ts-ignore
-        delete u.password_hash;
-      });
-    }
-
-    return sendSuccess(res, 'Data user berhasil', {
-      users: users,
-      pagination: { total: count, page: Number(page), limit: Number(limit) }
-    });
-
-  } catch (error: any) {
-    return sendError(res, 'Gagal mengambil data', 500, error);
+    return sendError(res, 'Gagal menghapus akun Anda', 500, error);
   }
 };
 
@@ -155,25 +252,22 @@ export const getUserStats = async (req: Request, res: Response) => {
       { count: totalUsers },
       { count: verifiedUsers },
       { count: premiumUsers },
-      { count: admins }
+      { count: admins },
+      { count: activeUsers } 
     ] = await Promise.all([
       supabase.from('users').select('*', { count: 'exact', head: true }),
       supabase.from('users').select('*', { count: 'exact', head: true }).eq('is_verified', true),
       supabase.from('users').select('*', { count: 'exact', head: true }).eq('is_premium', true),
-      supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'admin')
+      supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'admin'),
+      supabase.from('users').select('*', { count: 'exact', head: true }).gt('level', 1)
     ]);
 
-    const { count: highLevelUsers } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .gt('level', 10);
-
-    return sendSuccess(res, 'Statistik berhasil', {
-      total: totalUsers,
-      verified: verifiedUsers,
-      premium: premiumUsers,
-      admins: admins,
-      highLevel: highLevelUsers
+    return sendSuccess(res, 'Statistik pengguna', {
+      total_users: totalUsers || 0,
+      verified_users: verifiedUsers || 0,
+      premium_users: premiumUsers || 0,
+      admins: admins || 0,
+      active_users: activeUsers || 0,
     });
 
   } catch (error: any) {

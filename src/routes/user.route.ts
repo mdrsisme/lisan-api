@@ -1,15 +1,26 @@
 import { Router } from 'express';
-import { updateProfile, updatePassword, deleteAccount, getUsers, getUserStats } from '../controllers/user.controller';
-import { authenticate } from '../middleware/auth.middleware';
+import { 
+  createUser,
+  getUsers, 
+  getUserStats, 
+  updateUserAccount,
+  deleteUserAccount,
+  updateMyProfile,
+  deleteMyAccount
+} from '../controllers/user.controller';
 import { upload } from '../config/cloudinary';
 
 const router = Router();
 
-router.put('/profile', authenticate, upload.single('avatar'), updateProfile);
-router.put('/password', authenticate, updatePassword);
-router.delete('/account', authenticate, deleteAccount);
+router.get('/stats', getUserStats);
 
-router.get('/', authenticate, getUsers);
-router.get('/stats', authenticate, getUserStats);
+router.put('/me', upload.single('avatar'), updateMyProfile);
+router.delete('/me', deleteMyAccount);
+
+router.get('/', getUsers);
+router.post('/', createUser);
+
+router.put('/:id', updateUserAccount);
+router.delete('/:id', deleteUserAccount);
 
 export default router;
