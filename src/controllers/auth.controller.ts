@@ -4,6 +4,7 @@ import { resend } from '../config/resend';
 import { hashPassword, comparePassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { sendSuccess, sendError } from '../utils/apiResponse';
+import { User, Token, AuthPayload } from '../types/user';
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -22,18 +23,20 @@ export const register = async (req: Request, res: Response) => {
 
     const password_hash = await hashPassword(password);
 
+    const newUserPayload: Partial<User> = {
+      email,
+      username,
+      full_name: full_name || username,
+      password_hash,
+      is_verified: false,
+      role: role || 'user',
+      level: 1,
+      xp: 0
+    };
+
     const { data: newUser, error: userError } = await supabase
       .from('users')
-      .insert({
-        email,
-        username,
-        full_name: full_name || username,
-        password_hash,
-        is_verified: false,
-        role: role || 'user',
-        level: 1,
-        xp: 0
-      })
+      .insert(newUserPayload)
       .select()
       .single();
 
@@ -43,15 +46,17 @@ export const register = async (req: Request, res: Response) => {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 24);
 
+    const tokenPayload: Partial<Token> = {
+      user_id: newUser.id,
+      token: verificationCode,
+      type: 'verification',
+      expires_at: expiresAt.toISOString(),
+      is_used: false
+    };
+
     const { error: tokenError } = await supabase
       .from('tokens')
-      .insert({
-        user_id: newUser.id,
-        token: verificationCode,
-        type: 'verification',
-        expires_at: expiresAt.toISOString(),
-        is_used: false
-      });
+      .insert(tokenPayload);
 
     if (tokenError) throw tokenError;
 
@@ -96,7 +101,7 @@ export const verifyAccount = async (req: Request, res: Response) => {
 
     await supabase
       .from('users')
-      .update({ is_verified: true, updated_at: new Date() })
+      .update({ is_verified: true, updated_at: new Date().toISOString() })
       .eq('id', user.id);
 
     await supabase
@@ -171,20 +176,26 @@ export const login = async (req: Request, res: Response) => {
 
     if (!user) return sendError(res, 'Akun tidak ditemukan', 404);
 
-    const isMatch = await comparePassword(password, user.password_hash);
+    const userData = user as User;
+
+    const isMatch = await comparePassword(password, userData.password_hash);
     if (!isMatch) return sendError(res, 'Password salah', 401);
 
-    if (!user.is_verified) return sendError(res, 'Akun belum diverifikasi', 403);
+    if (!userData.is_verified) return sendError(res, 'Akun belum diverifikasi', 403);
 
-    const token = generateToken({
-      id: user.id,
-      role: user.role,
-      email: user.email
-    });
+    const payload: AuthPayload = {
+      id: userData.id,
+      role: userData.role,
+      email: userData.email
+    };
 
-    delete user.password_hash;
+    const token = generateToken(payload);
 
-    return sendSuccess(res, 'Login berhasil', { token, user });
+    const userResponse = { ...userData };
+    // @ts-ignore
+    delete userResponse.password_hash;
+
+    return sendSuccess(res, 'Login berhasil', { token, user: userResponse });
 
   } catch (error: any) {
     return sendError(res, 'Gagal login', 500, error);

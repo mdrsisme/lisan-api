@@ -2,13 +2,16 @@ import { Request, Response } from 'express';
 import { supabase } from '../config/database';
 import { hashPassword, comparePassword } from '../utils/password';
 import { sendSuccess, sendError } from '../utils/apiResponse';
+import { User, Token, AuthPayload } from '../types/user';
 
 export const updateProfile = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userPayload = (req as any).user as AuthPayload;
+    const userId = userPayload.id;
+    
     const { username, full_name, xp, level, is_verified, is_premium } = req.body;
     
-    let updateData: any = {};
+    let updateData: Partial<User> = {};
 
     if (username) updateData.username = username;
     if (full_name) updateData.full_name = full_name;
@@ -25,7 +28,7 @@ export const updateProfile = async (req: Request, res: Response) => {
       return sendError(res, 'Tidak ada data update', 400);
     }
 
-    updateData.updated_at = new Date();
+    updateData.updated_at = new Date().toISOString();
 
     const { data, error } = await supabase
       .from('users')
@@ -36,9 +39,11 @@ export const updateProfile = async (req: Request, res: Response) => {
 
     if (error) throw error;
 
-    delete data.password_hash;
+    const updatedUser = data as User;
+    // @ts-ignore
+    delete updatedUser.password_hash;
 
-    return sendSuccess(res, 'Update berhasil', data);
+    return sendSuccess(res, 'Update berhasil', updatedUser);
 
   } catch (error: any) {
     return sendError(res, 'Gagal update profil', 500, error);
@@ -47,7 +52,9 @@ export const updateProfile = async (req: Request, res: Response) => {
 
 export const updatePassword = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userPayload = (req as any).user as AuthPayload;
+    const userId = userPayload.id;
+    
     const { oldPassword, newPassword } = req.body;
 
     const { data: user } = await supabase
@@ -65,7 +72,10 @@ export const updatePassword = async (req: Request, res: Response) => {
     
     const { error } = await supabase
       .from('users')
-      .update({ password_hash: hashedNewPassword, updated_at: new Date() })
+      .update({ 
+        password_hash: hashedNewPassword, 
+        updated_at: new Date().toISOString() 
+      })
       .eq('id', userId);
 
     if (error) throw error;
@@ -79,7 +89,8 @@ export const updatePassword = async (req: Request, res: Response) => {
 
 export const deleteAccount = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userPayload = (req as any).user as AuthPayload;
+    const userId = userPayload.id;
 
     await supabase.from('tokens').delete().eq('user_id', userId);
     
@@ -119,14 +130,17 @@ export const getUsers = async (req: Request, res: Response) => {
 
     if (error) throw error;
 
-    if (data) {
-      data.forEach(u => {
+    const users = data as User[];
+
+    if (users) {
+      users.forEach(u => {
+        // @ts-ignore
         delete u.password_hash;
       });
     }
 
     return sendSuccess(res, 'Data user berhasil', {
-      users: data,
+      users: users,
       pagination: { total: count, page: Number(page), limit: Number(limit) }
     });
 
