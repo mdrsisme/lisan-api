@@ -1,18 +1,21 @@
 import { Router } from 'express';
 import { 
   createFaq, 
-  getFaqs, 
+  getAllFaqs, 
   getFaqById, 
   updateFaq, 
-  deleteFaq 
+  deleteFaq,
+  countFaqs 
 } from '../controllers/faq.controller';
 
 const router = Router();
 
-router.get('/', getFaqs);
-router.get('/:id', getFaqById);
+router.get('/count', countFaqs);
 
+router.get('/', getAllFaqs);
 router.post('/', createFaq);
+
+router.get('/:id', getFaqById);
 router.put('/:id', updateFaq);
 router.delete('/:id', deleteFaq);
 
