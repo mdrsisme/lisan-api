@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { supabase } from '../config/database';
 import { hashPassword } from '../utils/password';
 import { sendSuccess, sendError } from '../utils/apiResponse';
-import { User, AuthPayload } from '../types/user';
+import { User } from '../types/user';
 
 const sanitizeUser = (user: User): Omit<User, 'password_hash'> => {
   const { password_hash, ...userWithoutPassword } = user;
@@ -177,12 +177,16 @@ export const getUserProfile = async (req: Request, res: Response) => {
 
 export const getMyProfile = async (req: Request, res: Response) => {
     try {
-        const userPayload = (req as any).user as AuthPayload;
+        const userId = req.body.user_id;
+        
+        if (!userId) {
+            return sendError(res, "User ID wajib dikirim di body (mode tanpa auth)", 400);
+        }
         
         const { data, error } = await supabase
             .from('users')
             .select('*')
-            .eq('id', userPayload.id)
+            .eq('id', userId)
             .single();
             
         if(error || !data) return sendError(res, "User tidak ditemukan", 404);
@@ -195,8 +199,11 @@ export const getMyProfile = async (req: Request, res: Response) => {
 
 export const updateMyProfile = async (req: Request, res: Response) => {
   try {
-    const userPayload = (req as any).user as AuthPayload;
-    const myId = userPayload.id;
+    const userId = req.body.user_id;
+
+    if (!userId) {
+        return sendError(res, "User ID wajib dikirim di body (mode tanpa auth)", 400);
+    }
 
     const { username, full_name, email, password } = req.body;
     
@@ -223,7 +230,7 @@ export const updateMyProfile = async (req: Request, res: Response) => {
     const { data, error } = await supabase
       .from('users')
       .update(updateData)
-      .eq('id', myId)
+      .eq('id', userId)
       .select()
       .single();
 
@@ -238,13 +245,16 @@ export const updateMyProfile = async (req: Request, res: Response) => {
 
 export const deleteMyAccount = async (req: Request, res: Response) => {
   try {
-    const userPayload = (req as any).user as AuthPayload;
-    const myId = userPayload.id;
+    const userId = req.body.user_id;
+
+    if (!userId) {
+        return sendError(res, "User ID wajib dikirim di body (mode tanpa auth)", 400);
+    }
 
     const { error } = await supabase
       .from('users')
       .delete()
-      .eq('id', myId);
+      .eq('id', userId);
 
     if (error) throw error;
 
