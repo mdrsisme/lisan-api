@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/database';
-import { sendEmailVerification } from '../config/emailJS';
+import { sendEmailVerification } from '../config/emailjs';
 import { hashPassword, comparePassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { sendSuccess, sendError } from '../utils/apiResponse';
