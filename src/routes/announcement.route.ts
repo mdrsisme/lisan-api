@@ -1,23 +1,25 @@
 import { Router } from 'express';
 import { 
   createAnnouncement, 
-  getAnnouncements, 
+  getAllAnnouncements, 
+  searchAnnouncements,
+  countAnnouncements,
   getAnnouncementById,
   updateAnnouncement, 
   deleteAnnouncement 
 } from '../controllers/announcement.controller';
 import { upload } from '../config/cloudinary';
+
 const router = Router();
+const uploadFields = upload.fields([{ name: 'image', maxCount: 1 }, { name: 'video', maxCount: 1 }]);
 
-const uploadFields = upload.fields([
-  { name: 'image', maxCount: 1 }, 
-  { name: 'video', maxCount: 1 }
-]);
+router.get('/search', searchAnnouncements);
+router.get('/count', countAnnouncements);
 
-router.get('/', getAnnouncements);
-router.get('/:id', getAnnouncementById);
-
+router.get('/', getAllAnnouncements);
 router.post('/', uploadFields, createAnnouncement);
+
+router.get('/:id', getAnnouncementById);
 router.put('/:id', uploadFields, updateAnnouncement);
 router.delete('/:id', deleteAnnouncement);
 

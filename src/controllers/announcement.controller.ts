@@ -3,6 +3,7 @@ import { supabase } from '../config/database';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import { Announcement } from '../types/announcement';
 
+
 export const createAnnouncement = async (req: Request, res: Response) => {
   try {
     const { title, content, is_active } = req.body;
@@ -12,17 +13,11 @@ export const createAnnouncement = async (req: Request, res: Response) => {
     }
 
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-    
     let imageUrl = null;
     let videoUrl = null;
 
-    if (files?.['image']?.[0]) {
-      imageUrl = files['image'][0].path;
-    }
-
-    if (files?.['video']?.[0]) {
-      videoUrl = files['video'][0].path;
-    }
+    if (files?.['image']?.[0]) imageUrl = files['image'][0].path;
+    if (files?.['video']?.[0]) videoUrl = files['video'][0].path;
 
     const newAnnouncement = {
       title,
@@ -43,29 +38,23 @@ export const createAnnouncement = async (req: Request, res: Response) => {
     if (error) throw error;
 
     return sendSuccess(res, 'Pengumuman berhasil dibuat', data as Announcement, 201);
-
   } catch (error: any) {
     return sendError(res, 'Gagal membuat pengumuman', 500, error);
   }
 };
 
-export const getAnnouncements = async (req: Request, res: Response) => {
+
+export const getAllAnnouncements = async (req: Request, res: Response) => {
   try {
     const { 
-      search, 
-      sortBy = 'created_at', 
-      order = 'desc', 
       page = 1, 
-      limit,
-      is_active
+      limit, 
+      sortBy = 'created_at', 
+      order = 'desc',
+      is_active 
     } = req.query;
 
     let query = supabase.from('announcements').select('*', { count: 'exact' });
-
-    if (search) {
-      const searchTerm = `%${search}%`;
-      query = query.or(`title.ilike.${searchTerm},content.ilike.${searchTerm}`);
-    }
 
     if (is_active !== undefined) {
       query = query.eq('is_active', is_active === 'true');
@@ -76,7 +65,6 @@ export const getAnnouncements = async (req: Request, res: Response) => {
     query = query.order(sortField, { ascending: order === 'asc' });
 
     const isGetAll = limit === '0' || limit === 'all';
-    
     let pageNum = 1;
     let limitNum = 0;
 
@@ -85,7 +73,6 @@ export const getAnnouncements = async (req: Request, res: Response) => {
       limitNum = Number(limit) || 10;
       const from = (pageNum - 1) * limitNum;
       const to = from + limitNum - 1;
-      
       query = query.range(from, to);
     }
 
@@ -93,7 +80,7 @@ export const getAnnouncements = async (req: Request, res: Response) => {
 
     if (error) throw error;
 
-    return sendSuccess(res, 'Data pengumuman berhasil diambil', {
+    return sendSuccess(res, 'Data berhasil diambil', {
       data: data as Announcement[],
       meta: {
         total_data: count,
@@ -105,7 +92,53 @@ export const getAnnouncements = async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    return sendError(res, 'Gagal mengambil data pengumuman', 500, error);
+    return sendError(res, 'Gagal mengambil data', 500, error);
+  }
+};
+
+export const searchAnnouncements = async (req: Request, res: Response) => {
+  try {
+    const { q } = req.query;
+
+    if (!q) {
+      return sendError(res, 'Parameter pencarian (q) diperlukan', 400);
+    }
+
+    const searchTerm = `%${q}%`;
+
+    const { data, error } = await supabase
+      .from('announcements')
+      .select('*')
+      .or(`title.ilike.${searchTerm},content.ilike.${searchTerm}`)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return sendSuccess(res, `Hasil pencarian untuk: ${q}`, data as Announcement[]);
+
+  } catch (error: any) {
+    return sendError(res, 'Gagal melakukan pencarian', 500, error);
+  }
+};
+
+export const countAnnouncements = async (req: Request, res: Response) => {
+  try {
+    const { is_active } = req.query;
+
+    let query = supabase.from('announcements').select('*', { count: 'exact', head: true }); 
+
+    if (is_active !== undefined) {
+      query = query.eq('is_active', is_active === 'true');
+    }
+
+    const { count, error } = await query;
+
+    if (error) throw error;
+
+    return sendSuccess(res, 'Jumlah data berhasil diambil', { total: count });
+
+  } catch (error: any) {
+    return sendError(res, 'Gagal menghitung data', 500, error);
   }
 };
 
@@ -122,7 +155,7 @@ export const getAnnouncementById = async (req: Request, res: Response) => {
 
     return sendSuccess(res, 'Detail pengumuman', data as Announcement);
   } catch (error: any) {
-    return sendError(res, 'Gagal mengambil detail pengumuman', 500, error);
+    return sendError(res, 'Gagal mengambil detail', 500, error);
   }
 };
 
@@ -131,7 +164,6 @@ export const updateAnnouncement = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { title, content, is_active } = req.body;
 
-    // Cek dulu apakah data ada
     const { data: existingData, error: checkError } = await supabase
         .from('announcements')
         .select('id')
@@ -141,22 +173,13 @@ export const updateAnnouncement = async (req: Request, res: Response) => {
     if(checkError || !existingData) return sendError(res, "Pengumuman tidak ditemukan", 404);
 
     const updateData: any = {};
-
-    // Logic Partial Update (Hanya update field yang dikirim)
     if (title) updateData.title = title;
     if (content) updateData.content = content;
     if (is_active !== undefined) updateData.is_active = is_active === 'true' || is_active === true;
 
-    // Handle File Update (Jika user upload file baru, replace URL lama)
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-
-    if (files?.['image']?.[0]) {
-      updateData.image_url = files['image'][0].path;
-    }
-    
-    if (files?.['video']?.[0]) {
-      updateData.video_url = files['video'][0].path;
-    }
+    if (files?.['image']?.[0]) updateData.image_url = files['image'][0].path;
+    if (files?.['video']?.[0]) updateData.video_url = files['video'][0].path;
 
     if (Object.keys(updateData).length === 0) {
       return sendError(res, 'Tidak ada data yang diubah', 400);
