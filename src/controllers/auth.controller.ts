@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/database';
-import { resend } from '../config/resend';
+import { sendEmailVerification } from '../config/emailJS';
 import { hashPassword, comparePassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { sendSuccess, sendError } from '../utils/apiResponse';
@@ -60,12 +60,7 @@ export const register = async (req: Request, res: Response) => {
 
     if (tokenError) throw tokenError;
 
-    await resend.emails.send({
-      from: 'onboarding@resend.dev',
-      to: email,
-      subject: 'Kode Verifikasi Lisan',
-      html: `<p>Kode verifikasi Anda: <strong>${verificationCode}</strong></p>`
-    });
+    await sendEmailVerification(email, full_name || username, verificationCode);
 
     return sendSuccess(res, 'Registrasi berhasil', { email });
 
@@ -150,12 +145,7 @@ export const sendVerificationCode = async (req: Request, res: Response) => {
 
     if (error) throw error;
 
-    await resend.emails.send({
-      from: 'onboarding@resend.dev',
-      to: email,
-      subject: 'Kode Verifikasi Baru',
-      html: `<p>Halo ${user.full_name}, kode baru Anda: <strong>${newCode}</strong></p>`
-    });
+    await sendEmailVerification(email, user.full_name, newCode);
 
     return sendSuccess(res, 'Kode baru dikirim');
 
