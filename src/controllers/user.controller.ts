@@ -177,10 +177,10 @@ export const getUserProfile = async (req: Request, res: Response) => {
 
 export const getMyProfile = async (req: Request, res: Response) => {
     try {
-        const userId = req.body.user_id;
+        const userId = req.body.user_id || req.query.user_id;
         
         if (!userId) {
-            return sendError(res, "User ID wajib dikirim di body (mode tanpa auth)", 400);
+            return sendError(res, "User ID wajib dikirim (mode tanpa auth)", 400);
         }
         
         const { data, error } = await supabase
@@ -221,7 +221,7 @@ export const updateMyProfile = async (req: Request, res: Response) => {
         updateData.password_hash = await hashPassword(password);
     }
 
-    if (Object.keys(updateData).length === 0) {
+    if (Object.keys(updateData).length === 0 && !req.file) {
       return sendError(res, 'Tidak ada data profil yang diubah', 400);
     }
 

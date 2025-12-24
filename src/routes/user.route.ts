@@ -13,8 +13,9 @@ import { upload } from '../config/cloudinary';
 
 const router = Router();
 
-router.get('/me', getMyProfile);
-router.put('/me', upload.single('avatar'), updateMyProfile);
+router.get('/me', getMyProfile); 
+router.put('/me', upload.single('avatar'), updateMyProfile); 
+
 router.delete('/me', deleteMyAccount);
 
 router.get('/stats', getUserStats);
