@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { 
-  createUser,
   getUsers, 
   getUserStats, 
   updateUserAccount,
   deleteUserAccount,
   updateMyProfile,
   deleteMyAccount,
-  getUserProfile
+  getUserProfile,
+  getMyProfile
 } from '../controllers/user.controller';
 import { upload } from '../config/cloudinary';
 
@@ -15,15 +15,14 @@ const router = Router();
 
 router.get('/stats', getUserStats);
 
+router.get('/me', getMyProfile);
 router.put('/me', upload.single('avatar'), updateMyProfile);
 router.delete('/me', deleteMyAccount);
 
 router.get('/', getUsers);
-router.post('/', createUser);
 
+router.get('/:id', getUserProfile);
 router.put('/:id', updateUserAccount);
 router.delete('/:id', deleteUserAccount);
-
-router.get('/profile/:id', getUserProfile);
 
 export default router;

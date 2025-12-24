@@ -1,0 +1,193 @@
+import { Request, Response } from 'express';
+import { supabase } from '../config/database';
+import { sendSuccess, sendError } from '../utils/apiResponse';
+import { Announcement } from '../types/announcement';
+
+export const createAnnouncement = async (req: Request, res: Response) => {
+  try {
+    const { title, content, is_active } = req.body;
+
+    if (!title || !content) {
+      return sendError(res, 'Title dan Content wajib diisi', 400);
+    }
+
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+    
+    let imageUrl = null;
+    let videoUrl = null;
+
+    if (files?.['image']?.[0]) {
+      imageUrl = files['image'][0].path;
+    }
+
+    if (files?.['video']?.[0]) {
+      videoUrl = files['video'][0].path;
+    }
+
+    const newAnnouncement = {
+      title,
+      content,
+      image_url: imageUrl,
+      video_url: videoUrl,
+      is_active: is_active === 'true' || is_active === true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from('announcements')
+      .insert(newAnnouncement)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return sendSuccess(res, 'Pengumuman berhasil dibuat', data as Announcement, 201);
+
+  } catch (error: any) {
+    return sendError(res, 'Gagal membuat pengumuman', 500, error);
+  }
+};
+
+export const getAnnouncements = async (req: Request, res: Response) => {
+  try {
+    const { 
+      search, 
+      sortBy = 'created_at', 
+      order = 'desc', 
+      page = 1, 
+      limit = 10,
+      is_active
+    } = req.query;
+
+    let query = supabase.from('announcements').select('*', { count: 'exact' });
+
+    // 1. Search by Title or Content
+    if (search) {
+      const searchTerm = `%${search}%`;
+      query = query.or(`title.ilike.${searchTerm},content.ilike.${searchTerm}`);
+    }
+
+    // 2. Filter by Active Status
+    if (is_active !== undefined) {
+      query = query.eq('is_active', is_active === 'true');
+    }
+
+    // 3. Sorting
+    const allowedSorts = ['created_at', 'updated_at', 'title'];
+    const sortField = allowedSorts.includes(sortBy as string) ? (sortBy as string) : 'created_at';
+    query = query.order(sortField, { ascending: order === 'asc' });
+
+    // 4. Pagination
+    const pageNum = Number(page) || 1;
+    const limitNum = Number(limit) || 10;
+    const from = (pageNum - 1) * limitNum;
+    const to = from + limitNum - 1;
+
+    const { data, count, error } = await query.range(from, to);
+
+    if (error) throw error;
+
+    return sendSuccess(res, 'Data pengumuman berhasil diambil', {
+      data: data as Announcement[],
+      meta: {
+        total_data: count,
+        current_page: pageNum,
+        per_page: limitNum,
+        total_pages: count ? Math.ceil(count / limitNum) : 0,
+        has_next: count ? to < count - 1 : false
+      }
+    });
+
+  } catch (error: any) {
+    return sendError(res, 'Gagal mengambil data pengumuman', 500, error);
+  }
+};
+
+export const getAnnouncementById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('announcements')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error || !data) return sendError(res, 'Pengumuman tidak ditemukan', 404);
+
+    return sendSuccess(res, 'Detail pengumuman', data as Announcement);
+  } catch (error: any) {
+    return sendError(res, 'Gagal mengambil detail pengumuman', 500, error);
+  }
+};
+
+export const updateAnnouncement = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { title, content, is_active } = req.body;
+
+    // Cek dulu apakah data ada
+    const { data: existingData, error: checkError } = await supabase
+        .from('announcements')
+        .select('id')
+        .eq('id', id)
+        .single();
+
+    if(checkError || !existingData) return sendError(res, "Pengumuman tidak ditemukan", 404);
+
+    const updateData: any = {};
+
+    // Logic Partial Update (Hanya update field yang dikirim)
+    if (title) updateData.title = title;
+    if (content) updateData.content = content;
+    if (is_active !== undefined) updateData.is_active = is_active === 'true' || is_active === true;
+
+    // Handle File Update (Jika user upload file baru, replace URL lama)
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+
+    if (files?.['image']?.[0]) {
+      updateData.image_url = files['image'][0].path;
+    }
+    
+    if (files?.['video']?.[0]) {
+      updateData.video_url = files['video'][0].path;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return sendError(res, 'Tidak ada data yang diubah', 400);
+    }
+
+    updateData.updated_at = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from('announcements')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return sendSuccess(res, 'Pengumuman berhasil diperbarui', data as Announcement);
+
+  } catch (error: any) {
+    return sendError(res, 'Gagal memperbarui pengumuman', 500, error);
+  }
+};
+
+export const deleteAnnouncement = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from('announcements')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    return sendSuccess(res, 'Pengumuman berhasil dihapus');
+  } catch (error: any) {
+    return sendError(res, 'Gagal menghapus pengumuman', 500, error);
+  }
+};
