@@ -56,35 +56,40 @@ export const getAnnouncements = async (req: Request, res: Response) => {
       sortBy = 'created_at', 
       order = 'desc', 
       page = 1, 
-      limit = 10,
+      limit,
       is_active
     } = req.query;
 
     let query = supabase.from('announcements').select('*', { count: 'exact' });
 
-    // 1. Search by Title or Content
     if (search) {
       const searchTerm = `%${search}%`;
       query = query.or(`title.ilike.${searchTerm},content.ilike.${searchTerm}`);
     }
 
-    // 2. Filter by Active Status
     if (is_active !== undefined) {
       query = query.eq('is_active', is_active === 'true');
     }
 
-    // 3. Sorting
     const allowedSorts = ['created_at', 'updated_at', 'title'];
     const sortField = allowedSorts.includes(sortBy as string) ? (sortBy as string) : 'created_at';
     query = query.order(sortField, { ascending: order === 'asc' });
 
-    // 4. Pagination
-    const pageNum = Number(page) || 1;
-    const limitNum = Number(limit) || 10;
-    const from = (pageNum - 1) * limitNum;
-    const to = from + limitNum - 1;
+    const isGetAll = limit === '0' || limit === 'all';
+    
+    let pageNum = 1;
+    let limitNum = 0;
 
-    const { data, count, error } = await query.range(from, to);
+    if (!isGetAll) {
+      pageNum = Number(page) || 1;
+      limitNum = Number(limit) || 10;
+      const from = (pageNum - 1) * limitNum;
+      const to = from + limitNum - 1;
+      
+      query = query.range(from, to);
+    }
+
+    const { data, count, error } = await query;
 
     if (error) throw error;
 
@@ -92,10 +97,10 @@ export const getAnnouncements = async (req: Request, res: Response) => {
       data: data as Announcement[],
       meta: {
         total_data: count,
-        current_page: pageNum,
-        per_page: limitNum,
-        total_pages: count ? Math.ceil(count / limitNum) : 0,
-        has_next: count ? to < count - 1 : false
+        current_page: isGetAll ? 1 : pageNum,
+        per_page: isGetAll ? count : limitNum,
+        total_pages: (count && !isGetAll && limitNum > 0) ? Math.ceil(count / limitNum) : 1,
+        has_next: (!isGetAll && count && limitNum > 0) ? ((pageNum - 1) * limitNum) + limitNum < count : false
       }
     });
 
