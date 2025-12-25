@@ -95,25 +95,17 @@ export const createLesson = async (req: Request, res: Response) => {
 
 export const getAllLessons = async (req: Request, res: Response) => {
   try {
-    const { 
-      page = 1, 
-      limit = 20, 
-      module_id, 
-      search, 
-      type,
-      is_published,
-      sort_by = 'order_index', 
-      sort_order = 'asc' 
-    } = req.query;
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 20;
+    const { from, to } = getPagination(page, limit);
 
-    const pageNum = Number(page);
-    const limitNum = Number(limit);
-    const { from, to } = getPagination(pageNum, limitNum);
+    const { module_id, search, type, is_published, sort_by, sort_order } = req.query;
 
     let query = supabase.from('lessons').select('*', { count: 'exact' });
 
     if (search) {
-      query = query.or(`title.ilike.%${search}%,slug.ilike.%${search}%`);
+      const searchTerm = `%${search}%`;
+      query = query.or(`title.ilike.${searchTerm},slug.ilike.${searchTerm}`);
     }
 
     if (module_id) {
@@ -128,20 +120,22 @@ export const getAllLessons = async (req: Request, res: Response) => {
       query = query.eq('is_published', is_published === 'true');
     }
 
-    query = query.order(String(sort_by), { ascending: sort_order === 'asc' });
+    const sortColumn = (sort_by as string) || 'order_index';
+    const sortDirection = sort_order === 'desc' ? false : true;
+
+    query = query.order(sortColumn, { ascending: sortDirection });
 
     const { data, count, error } = await query.range(from, to);
 
     if (error) throw error;
 
-    // [UPDATE] Return format konsisten dengan Course & Module
     return sendSuccess(res, 'Data pelajaran berhasil diambil', {
       lessons: data as Lesson[],
       pagination: {
         total_data: count,
-        total_page: Math.ceil((count || 0) / limitNum),
-        current_page: pageNum,
-        per_page: limitNum
+        total_page: Math.ceil((count || 0) / limit),
+        current_page: page,
+        per_page: limit
       }
     });
   } catch (error: any) {
