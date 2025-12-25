@@ -13,8 +13,8 @@ router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/announcements', announcementRoutes);
 router.use('/faqs', faqRoutes);
-router.use('/course', courseRoutes);
-router.use('/module', moduleRoutes);
-router.use('/lesson', lessonRoutes);
+router.use('/courses', courseRoutes);
+router.use('/modules', moduleRoutes);
+router.use('/lessons', lessonRoutes);
 
 export default router;

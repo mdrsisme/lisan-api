@@ -1,12 +1,21 @@
 import { Router } from 'express';
 import { upload } from '../config/cloudinary';
-import * as CourseController from '../controllers/course.controller';
+import { 
+  createCourse, 
+  getAllCourses, 
+  getCourseById, 
+  updateCourse, 
+  deleteCourse,
+  getCourseStats
+} from '../controllers/course.controller';
 
 const router = Router();
 
-router.get('/courses', CourseController.getCourses);
-router.get('/courses/:slug', CourseController.getCourseBySlug);
-router.post('/courses', upload.single('thumbnail'), CourseController.createCourse);
-router.put('/courses/:id', upload.single('thumbnail'), CourseController.updateCourse);
+router.post('/', upload.single('thumbnail'), createCourse);
+router.get('/stats', getCourseStats);
+router.get('/', getAllCourses);
+router.get('/:id', getCourseById);
+router.put('/:id', upload.single('thumbnail'), updateCourse);
+router.delete('/:id', deleteCourse);
 
 export default router;

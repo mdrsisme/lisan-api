@@ -7,7 +7,6 @@ export interface Lesson {
   slug: string;
   description: string | null;
   
-  // Fitur khusus AI
   type: LessonType;
   target_gesture: string | null; // Contoh: 'A', 'B', 'HELLO'
   

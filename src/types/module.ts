@@ -6,6 +6,7 @@ export interface Module {
   title: string;
   slug: string;
   description: string | null;
+  thumbnail_url: string | null;
   order_index: number;
   is_published: boolean;
   created_at: string;

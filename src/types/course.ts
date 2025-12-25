@@ -1,4 +1,4 @@
-import { Module } from './module';
+import { Module } from './module'; 
 
 export type CourseLevel = 'beginner' | 'intermediate' | 'advanced';
 
@@ -9,8 +9,8 @@ export interface Course {
   description: string | null;
   thumbnail_url: string | null;
   level: CourseLevel;
-  price: number;
   is_published: boolean;
+  access_key: string | null;  
   created_at: string;
   updated_at: string;
   modules?: Module[];

@@ -2,102 +2,253 @@ import { Request, Response } from 'express';
 import { supabase } from '../config/database';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import { createSlug } from '../utils/slugify';
+import { Lesson, LessonType } from '../types/lesson';
+
+const getPagination = (page: number, limit: number) => {
+  const offset = (page - 1) * limit;
+  return { from: offset, to: offset + limit - 1 };
+};
+
+export const getLessonStats = async (req: Request, res: Response) => {
+  try {
+    const { module_id, type, is_published } = req.query;
+
+    let query = supabase.from('lessons').select('*', { count: 'exact', head: true });
+
+    if (module_id) {
+      query = query.eq('module_id', module_id);
+    }
+
+    if (type) {
+      query = query.eq('type', type);
+    }
+
+    if (is_published !== undefined && is_published !== '') {
+      query = query.eq('is_published', is_published === 'true');
+    }
+
+    const { count, error } = await query;
+
+    if (error) throw error;
+
+    return sendSuccess(res, 'Statistik pelajaran berhasil diambil', {
+      total_data: count || 0,
+      filter: {
+        module_id: module_id || 'all',
+        type: type || 'all',
+        is_published: is_published !== undefined ? is_published : 'all'
+      }
+    });
+  } catch (error: any) {
+    return sendError(res, 'Gagal mengambil statistik pelajaran', 500, error);
+  }
+};
 
 export const createLesson = async (req: Request, res: Response) => {
   try {
-    const { 
-      module_id, 
-      title, 
-      description, 
-      type, 
-      target_gesture, 
-      order_index, 
-      xp_reward 
-    } = req.body;
+    const { module_id, title, description, type, target_gesture, order_index, xp_reward, is_published } = req.body;
+    const content_url = req.file ? (req.file as any).path : null;
 
-    if (!module_id || !title || !type) return sendError(res, 'Data wajib tidak lengkap', 400);
+    if (!module_id || !title) {
+      return sendError(res, 'Module ID dan Judul pelajaran wajib diisi', 400);
+    }
 
     const slug = createSlug(title);
-    let content_url = null;
 
-    // Handle Upload Video / PDF
-    if (req.file) {
-      content_url = req.file.path;
-    } else if (req.body.content_url) {
-      // Jika kirim string URL langsung
-      content_url = req.body.content_url;
+    const { data: existingLesson } = await supabase
+      .from('lessons')
+      .select('id')
+      .eq('module_id', module_id)
+      .eq('slug', slug)
+      .single();
+
+    if (existingLesson) {
+      return sendError(res, 'Pelajaran dengan judul ini sudah ada di modul tersebut', 409);
     }
 
-    // Validasi untuk tipe Camera Practice
-    if (type === 'camera_practice' && !target_gesture) {
-      return sendError(res, 'Target Gesture wajib diisi untuk tipe Camera Practice', 400);
-    }
-
-    const newLesson = {
+    const newLesson: Partial<Lesson> = {
       module_id,
       title,
       slug,
       description,
-      type, // 'video' | 'text' | 'camera_practice'
-      target_gesture: type === 'camera_practice' ? target_gesture : null,
+      type: (type as LessonType) || 'text',
+      target_gesture: target_gesture || null,
       content_url,
-      order_index: Number(order_index) || 0,
-      xp_reward: Number(xp_reward) || 100,
-      is_published: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      order_index: order_index ? Number(order_index) : 0,
+      xp_reward: xp_reward ? Number(xp_reward) : 100,
+      is_published: is_published === 'true' || is_published === true,
     };
 
-    const { data, error } = await supabase.from('lessons').insert(newLesson).select().single();
+    const { data, error } = await supabase
+      .from('lessons')
+      .insert(newLesson)
+      .select()
+      .single();
+
     if (error) throw error;
 
-    return sendSuccess(res, 'Lesson berhasil dibuat', data);
+    return sendSuccess(res, 'Pelajaran berhasil dibuat', data as Lesson, 201);
   } catch (error: any) {
-    return sendError(res, 'Gagal membuat lesson', 500, error);
+    return sendError(res, 'Gagal membuat pelajaran', 500, error);
+  }
+};
+
+export const getAllLessons = async (req: Request, res: Response) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      module_id, 
+      search, 
+      type,
+      is_published,
+      sort_by = 'order_index', 
+      sort_order = 'asc' 
+    } = req.query;
+
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
+    const { from, to } = getPagination(pageNum, limitNum);
+
+    let query = supabase.from('lessons').select('*', { count: 'exact' });
+
+    if (search) {
+      query = query.or(`title.ilike.%${search}%,slug.ilike.%${search}%`);
+    }
+
+    if (module_id) {
+      query = query.eq('module_id', module_id);
+    }
+
+    if (type) {
+      query = query.eq('type', type);
+    }
+
+    if (is_published !== undefined && is_published !== '') {
+      query = query.eq('is_published', is_published === 'true');
+    }
+
+    query = query.order(String(sort_by), { ascending: sort_order === 'asc' });
+
+    const { data, count, error } = await query.range(from, to);
+
+    if (error) throw error;
+
+    // [UPDATE] Return format konsisten dengan Course & Module
+    return sendSuccess(res, 'Data pelajaran berhasil diambil', {
+      lessons: data as Lesson[],
+      pagination: {
+        total_data: count,
+        total_page: Math.ceil((count || 0) / limitNum),
+        current_page: pageNum,
+        per_page: limitNum
+      }
+    });
+  } catch (error: any) {
+    return sendError(res, 'Gagal mengambil data pelajaran', 500, error);
+  }
+};
+
+export const getLessonById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from('lessons')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error || !data) {
+      return sendError(res, 'Pelajaran tidak ditemukan', 404);
+    }
+
+    return sendSuccess(res, 'Detail pelajaran berhasil diambil', data as Lesson);
+  } catch (error: any) {
+    return sendError(res, 'Gagal mengambil detail pelajaran', 500, error);
   }
 };
 
 export const updateLesson = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { title, description, type, target_gesture, order_index, xp_reward, is_published } = req.body;
+    const updates: Partial<Lesson> = {};
 
-    const updateData: any = {};
-    
-    if (title) {
-        updateData.title = title;
-        updateData.slug = createSlug(title);
+    if (req.body.title) {
+      let targetModuleId = req.body.module_id;
+
+      if (!targetModuleId) {
+         const { data: currentLesson } = await supabase.from('lessons').select('module_id').eq('id', id).single();
+         if (!currentLesson) return sendError(res, 'Pelajaran tidak ditemukan', 404);
+         targetModuleId = currentLesson.module_id;
+      }
+
+      const newSlug = createSlug(req.body.title);
+      
+      // Cek duplikasi di target module
+      const { data: duplicate } = await supabase
+        .from('lessons')
+        .select('id')
+        .eq('module_id', targetModuleId)
+        .eq('slug', newSlug)
+        .neq('id', id)
+        .single();
+
+      if (duplicate) {
+        return sendError(res, 'Judul pelajaran ini sudah digunakan di modul tersebut', 409);
+      }
+
+      updates.title = req.body.title;
+      updates.slug = newSlug;
     }
-    if (description) updateData.description = description;
-    if (type) updateData.type = type;
-    if (target_gesture) updateData.target_gesture = target_gesture;
-    if (order_index !== undefined) updateData.order_index = Number(order_index);
-    if (xp_reward !== undefined) updateData.xp_reward = Number(xp_reward);
-    if (is_published !== undefined) updateData.is_published = is_published === 'true';
+
+    if (req.body.description !== undefined) updates.description = req.body.description;
+    if (req.body.type) updates.type = req.body.type as LessonType;
+    if (req.body.target_gesture !== undefined) updates.target_gesture = req.body.target_gesture;
+    if (req.body.order_index !== undefined) updates.order_index = Number(req.body.order_index);
+    if (req.body.xp_reward !== undefined) updates.xp_reward = Number(req.body.xp_reward);
+    if (req.body.module_id) updates.module_id = req.body.module_id;
     
-    // Replace content URL if new file uploaded
+    if (req.body.is_published !== undefined) {
+      updates.is_published = req.body.is_published === 'true' || req.body.is_published === true;
+    }
+
     if (req.file) {
-        updateData.content_url = req.file.path;
+      updates.content_url = (req.file as any).path;
     }
 
-    updateData.updated_at = new Date().toISOString();
+    if (Object.keys(updates).length === 0) {
+      return sendError(res, 'Tidak ada data update yang valid', 400);
+    }
 
-    const { data, error } = await supabase.from('lessons').update(updateData).eq('id', id).select().single();
+    const { data, error } = await supabase
+      .from('lessons')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
     if (error) throw error;
 
-    return sendSuccess(res, 'Lesson berhasil diupdate', data);
+    return sendSuccess(res, 'Pelajaran berhasil diperbarui', data as Lesson);
   } catch (error: any) {
-    return sendError(res, 'Gagal update lesson', 500, error);
+    return sendError(res, 'Gagal memperbarui pelajaran', 500, error);
   }
 };
 
 export const deleteLesson = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { error } = await supabase.from('lessons').delete().eq('id', id);
+
+    const { error } = await supabase
+      .from('lessons')
+      .delete()
+      .eq('id', id);
+
     if (error) throw error;
-    return sendSuccess(res, 'Lesson berhasil dihapus');
+
+    return sendSuccess(res, 'Pelajaran berhasil dihapus');
   } catch (error: any) {
-    return sendError(res, 'Gagal menghapus lesson', 500, error);
+    return sendError(res, 'Gagal menghapus pelajaran', 500, error);
   }
 };
