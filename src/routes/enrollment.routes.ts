@@ -7,7 +7,8 @@ import {
   deleteEnrollment,
   getStatsUsersPerCourse,
   getStatsCoursesPerUser,
-  checkEnrollmentStatus 
+  checkEnrollmentStatus,
+  getUserEnrollments
 } from '../controllers/enrollment.controller';
 
 const router = Router();
@@ -24,5 +25,7 @@ router.get('/:id', getEnrollmentById);
 router.put('/:id', updateEnrollment);
 
 router.delete('/:id', deleteEnrollment);
+
+router.get('/user/:user_id', getUserEnrollments);
 
 export default router;

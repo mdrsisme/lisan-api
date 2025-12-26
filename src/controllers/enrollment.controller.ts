@@ -255,3 +255,47 @@ export const getStatsCoursesPerUser = async (req: Request, res: Response) => {
     return sendError(res, 'Gagal mengambil statistik', 500, error);
   }
 };
+
+export const getUserEnrollments = async (req: Request, res: Response) => {
+  try {
+    const { user_id } = req.params;
+    const { status, q } = req.query;
+
+    if (!user_id) {
+      return sendError(res, 'User ID wajib diisi', 400);
+    }
+
+    let query = supabase
+      .from('enrollments')
+      .select(`
+        id,
+        status,
+        progress_percentage,
+        created_at,
+        completed_at,
+        courses (
+          id,
+          title,
+          description,
+          thumbnail_url, 
+          instructor_name,
+          price
+        )
+      `)
+      .eq('user_id', user_id);
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+    
+    query = query.order('created_at', { ascending: false });
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    return sendSuccess(res, 'Daftar kursus user berhasil diambil', data);
+  } catch (error: any) {
+    return sendError(res, 'Gagal mengambil daftar kursus user', 500, error);
+  }
+};
