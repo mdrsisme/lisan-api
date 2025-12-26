@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { 
   createAnnouncement, 
   getAllAnnouncements, 
+  getPublicAnnouncements,
   searchAnnouncements,
   countAnnouncements,
   getAnnouncementById,
@@ -13,6 +14,7 @@ import { upload } from '../config/cloudinary';
 const router = Router();
 const uploadFields = upload.fields([{ name: 'image', maxCount: 1 }, { name: 'video', maxCount: 1 }]);
 
+router.get('/public', getPublicAnnouncements);
 router.get('/search', searchAnnouncements);
 router.get('/count', countAnnouncements);
 

@@ -219,3 +219,40 @@ export const deleteAnnouncement = async (req: Request, res: Response) => {
     return sendError(res, 'Gagal menghapus pengumuman', 500, error);
   }
 };
+
+export const getPublicAnnouncements = async (req: Request, res: Response) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+
+    let query = supabase
+      .from('announcements')
+      .select('*', { count: 'exact' })
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+
+    const pageNum = Number(page) || 1;
+    const limitNum = Number(limit) || 10;
+    const from = (pageNum - 1) * limitNum;
+    const to = from + limitNum - 1;
+
+    query = query.range(from, to);
+
+    const { data, count, error } = await query;
+
+    if (error) throw error;
+
+    return sendSuccess(res, 'Daftar pengumuman publik berhasil diambil', {
+      data: data as Announcement[],
+      meta: {
+        total_data: count,
+        current_page: pageNum,
+        per_page: limitNum,
+        total_pages: (count && limitNum > 0) ? Math.ceil(count / limitNum) : 1,
+        has_next: (count && limitNum > 0) ? ((pageNum - 1) * limitNum) + limitNum < count : false
+      }
+    });
+
+  } catch (error: any) {
+    return sendError(res, 'Gagal mengambil data pengumuman', 500, error);
+  }
+};

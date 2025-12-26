@@ -3,6 +3,7 @@ import { upload } from '../config/cloudinary';
 import { 
   createModule, 
   getAllModules, 
+  getPublishedModules,
   getModuleStats,
   getModuleById, 
   updateModule, 
@@ -11,9 +12,12 @@ import {
 
 const router = Router();
 
-router.post('/', upload.single('thumbnail'), createModule);
+router.get('/published', getPublishedModules);
 router.get('/stats', getModuleStats);
+
+router.post('/', upload.single('thumbnail'), createModule);
 router.get('/', getAllModules);
+
 router.get('/:id', getModuleById);
 router.put('/:id', upload.single('thumbnail'), updateModule);
 router.delete('/:id', deleteModule);
