@@ -14,7 +14,7 @@ import { upload } from '../config/cloudinary';
 const router = Router();
 const uploadFields = upload.fields([{ name: 'image', maxCount: 1 }, { name: 'video', maxCount: 1 }]);
 
-router.get('/public', getAllActiveAnnouncements);
+router.get('/active', getAllActiveAnnouncements);
 router.get('/search', searchAnnouncements);
 router.get('/count', countAnnouncements);
 
