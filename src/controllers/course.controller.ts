@@ -103,7 +103,7 @@ export const createCourse = async (req: Request, res: Response) => {
       description,
       level: (level as CourseLevel) || 'beginner',
       is_published: is_published === 'true',
-      access_key: access_key || null, // Handle Access Key
+      access_key: access_key || null,
       thumbnail_url,
     };
 
@@ -161,6 +161,53 @@ export const getAllCourses = async (req: Request, res: Response) => {
   }
 };
 
+export const getPublishedCourses = async (req: Request, res: Response) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 10, 
+      search, 
+      level 
+    } = req.query;
+
+    const pageNum = Number(page) || 1;
+    const limitNum = Number(limit) || 10;
+    const { from, to } = getPagination(pageNum, limitNum);
+
+    let query = supabase
+      .from('courses')
+      .select('*', { count: 'exact' })
+      .eq('is_published', true);
+
+    if (search) {
+      query = query.ilike('title', `%${search}%`);
+    }
+
+    if (level) {
+      query = query.eq('level', level);
+    }
+
+    query = query.order('created_at', { ascending: false });
+
+    const { data, count, error } = await query.range(from, to);
+
+    if (error) throw error;
+
+    return sendSuccess(res, 'Daftar kursus publik berhasil diambil', {
+      courses: data as Course[],
+      pagination: {
+        total_data: count,
+        total_page: (count && limitNum > 0) ? Math.ceil(count / limitNum) : 1,
+        current_page: pageNum,
+        per_page: limitNum
+      }
+    });
+
+  } catch (error: any) {
+    return sendError(res, 'Gagal mengambil data kursus publik', 500, error);
+  }
+};
+
 export const getCourseById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -193,7 +240,7 @@ export const updateCourse = async (req: Request, res: Response) => {
     
     if (req.body.description !== undefined) updates.description = req.body.description;
     if (req.body.level) updates.level = req.body.level as CourseLevel;
-    if (req.body.access_key !== undefined) updates.access_key = req.body.access_key; // Update Key
+    if (req.body.access_key !== undefined) updates.access_key = req.body.access_key;
 
     if (req.body.is_published !== undefined) {
       updates.is_published = req.body.is_published === 'true' || req.body.is_published === true;
