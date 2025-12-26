@@ -11,6 +11,27 @@ export const createEnrollment = async (req: Request, res: Response) => {
       return sendError(res, 'User ID dan Course ID wajib diisi', 400);
     }
 
+    const { data: course, error: courseError } = await supabase
+      .from('courses')
+      .select('access_key, title')
+      .eq('id', course_id)
+      .single();
+
+    if (courseError || !course) {
+      return sendError(res, 'Kursus tidak ditemukan', 404);
+    }
+
+    if (used_key !== 'ADMIN_BYPASS') {
+      if (course.access_key) {
+        if (!used_key) {
+          return sendError(res, 'Kursus ini memerlukan Kode Akses (Access Key).', 403);
+        }
+        if (used_key !== course.access_key) {
+          return sendError(res, 'Kode Akses salah. Silakan periksa kembali.', 403);
+        }
+      } 
+    }
+
     const { data: existing } = await supabase
       .from('enrollments')
       .select('id')
@@ -25,7 +46,7 @@ export const createEnrollment = async (req: Request, res: Response) => {
     const newEnrollment = {
       user_id,
       course_id,
-      used_key,
+      used_key: used_key || null,
       status: 'active',
       progress_percentage: 0,
       created_at: new Date().toISOString(),
@@ -40,7 +61,8 @@ export const createEnrollment = async (req: Request, res: Response) => {
 
     if (error) throw error;
 
-    return sendSuccess(res, 'Enrollment berhasil dibuat', data as Enrollment, 201);
+    return sendSuccess(res, 'Pendaftaran berhasil!', data as Enrollment, 201);
+
   } catch (error: any) {
     return sendError(res, 'Gagal membuat enrollment', 500, error);
   }
