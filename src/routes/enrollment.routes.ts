@@ -8,8 +8,7 @@ import {
   getStatsUsersPerCourse,
   getStatsCoursesPerUser,
   checkEnrollmentStatus,
-  getUserEnrollments,
-  getModuleEnrollmentsByUserId
+  getUserEnrollments
 } from '../controllers/enrollment.controller';
 
 const router = Router();
@@ -23,7 +22,6 @@ router.get('/', getAllEnrollments);
 router.post('/', createEnrollment);
 
 router.get('/user/:user_id', getUserEnrollments);
-router.get('/module/user/:user_id', getModuleEnrollmentsByUserId);
 
 router.get('/:id', getEnrollmentById);
 router.put('/:id', updateEnrollment);
