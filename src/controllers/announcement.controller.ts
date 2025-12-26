@@ -172,10 +172,13 @@ export const updateAnnouncement = async (req: Request, res: Response) => {
 
     if(checkError || !existingData) return sendError(res, "Pengumuman tidak ditemukan", 404);
 
-    const updateData: any = {};
+   const updateData: any = {};
     if (title) updateData.title = title;
     if (content) updateData.content = content;
-    if (is_active !== undefined) updateData.is_active = is_active === 'true' || is_active === true;
+
+    if (is_active !== undefined) {
+       updateData.is_active = String(is_active) === 'true'; 
+    }
 
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
     if (files?.['image']?.[0]) updateData.image_url = files['image'][0].path;
@@ -220,39 +223,35 @@ export const deleteAnnouncement = async (req: Request, res: Response) => {
   }
 };
 
-export const getPublicAnnouncements = async (req: Request, res: Response) => {
+export const getAllActiveAnnouncements = async (req: Request, res: Response) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-
-    let query = supabase
-      .from('announcements')
-      .select('*', { count: 'exact' })
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
-
-    const pageNum = Number(page) || 1;
-    const limitNum = Number(limit) || 10;
+    const pageNum = parseInt(page as string) || 1;
+    const limitNum = parseInt(limit as string) || 10;
     const from = (pageNum - 1) * limitNum;
     const to = from + limitNum - 1;
 
-    query = query.range(from, to);
-
-    const { data, count, error } = await query;
+    const { data, count, error } = await supabase
+      .from('announcements')
+      .select('*', { count: 'exact' })
+      .eq('is_active', true) 
+      .order('created_at', { ascending: false })
+      .range(from, to);
 
     if (error) throw error;
 
-    return sendSuccess(res, 'Daftar pengumuman publik berhasil diambil', {
-      data: data as Announcement[],
+    return sendSuccess(res, 'Daftar pengumuman aktif berhasil diambil', {
+      data: (data as Announcement[]) || [],
       meta: {
-        total_data: count,
+        total_data: count || 0,
         current_page: pageNum,
         per_page: limitNum,
-        total_pages: (count && limitNum > 0) ? Math.ceil(count / limitNum) : 1,
-        has_next: (count && limitNum > 0) ? ((pageNum - 1) * limitNum) + limitNum < count : false
+        total_pages: (count && limitNum > 0) ? Math.ceil(count / limitNum) : 0,
+        has_next: (count && limitNum > 0) ? to < count - 1 : false
       }
     });
 
   } catch (error: any) {
-    return sendError(res, 'Gagal mengambil data pengumuman', 500, error);
+    return sendError(res, 'Gagal mengambil data pengumuman aktif', 500, error);
   }
 };
