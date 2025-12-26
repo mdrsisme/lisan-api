@@ -11,7 +11,6 @@ export const createEnrollment = async (req: Request, res: Response) => {
       return sendError(res, 'User ID dan Course ID wajib diisi', 400);
     }
 
-    // Cek duplikasi
     const { data: existing } = await supabase
       .from('enrollments')
       .select('id')
@@ -259,7 +258,7 @@ export const getStatsCoursesPerUser = async (req: Request, res: Response) => {
 export const getUserEnrollments = async (req: Request, res: Response) => {
   try {
     const { user_id } = req.params;
-    const { status, q } = req.query;
+    const { status } = req.query;
 
     if (!user_id) {
       return sendError(res, 'User ID wajib diisi', 400);
@@ -297,5 +296,26 @@ export const getUserEnrollments = async (req: Request, res: Response) => {
     return sendSuccess(res, 'Daftar kursus user berhasil diambil', data);
   } catch (error: any) {
     return sendError(res, 'Gagal mengambil daftar kursus user', 500, error);
+  }
+};
+
+export const getModuleEnrollmentsByUserId = async (req: Request, res: Response) => {
+  try {
+    const { user_id } = req.params;
+
+    if (!user_id) {
+      return sendError(res, 'User ID wajib diisi', 400);
+    }
+
+    const { data, error } = await supabase
+      .from('module_enrollments')
+      .select('*, modules(*)')
+      .eq('user_id', user_id);
+
+    if (error) throw error;
+
+    return sendSuccess(res, 'Data module enrollment user berhasil diambil', data);
+  } catch (error: any) {
+    return sendError(res, 'Gagal mengambil data module enrollment user', 500, error);
   }
 };

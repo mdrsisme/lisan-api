@@ -1,3 +1,6 @@
+import { Course } from './course';
+import { User } from './user';
+
 export type EnrollmentStatus = 'active' | 'completed' | 'dropped';
 
 export interface Enrollment {
@@ -10,7 +13,6 @@ export interface Enrollment {
   created_at: string;
   updated_at: string;
 
-  // Optional: Untuk join query
-  courses?: any; 
-  users?: any;
+  courses?: Course; 
+  users?: User;
 }
