@@ -1,24 +1,28 @@
 import { Router } from 'express';
-import {
-    enrollCourse,
-    getUserEnrollments,
-    checkEnrollmentStatus,
-    updateProgress,
-    updateStatus,
-    getGeneralStats,
-    getUserEnrollmentCounts,
-    getModuleUserStats
+import { 
+  createEnrollment, 
+  getAllEnrollments, 
+  getEnrollmentById, 
+  updateEnrollment, 
+  deleteEnrollment,
+  getStatsUsersPerCourse,
+  getStatsCoursesPerUser,
+  checkEnrollmentStatus 
 } from '../controllers/enrollment.controller';
 
 const router = Router();
 
-router.post('/', enrollCourse);
-router.get('/', getUserEnrollments);
-router.get('/check', checkEnrollmentStatus);
-router.patch('/:id/progress', updateProgress);
-router.patch('/:id/status', updateStatus);
-router.get('/general', getGeneralStats);
-router.get('/users/top-courses', getUserEnrollmentCounts);
-router.get('/modules/top-users', getModuleUserStats);
+router.get('/stats/users-per-course', getStatsUsersPerCourse);
+router.get('/stats/courses-per-user', getStatsCoursesPerUser);
+
+router.get('/check', checkEnrollmentStatus); 
+
+router.get('/', getAllEnrollments);
+router.post('/', createEnrollment);
+router.get('/:id', getEnrollmentById);
+
+router.put('/:id', updateEnrollment);
+
+router.delete('/:id', deleteEnrollment);
 
 export default router;
