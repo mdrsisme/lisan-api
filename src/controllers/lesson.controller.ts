@@ -246,3 +246,46 @@ export const deleteLesson = async (req: Request, res: Response) => {
     return sendError(res, 'Gagal menghapus pelajaran', 500, error);
   }
 };
+
+export const getPublishedLessons = async (req: Request, res: Response) => {
+  try {
+    const { page = 1, limit = 50, module_id, search } = req.query;
+    let query = supabase
+      .from('lessons')
+      .select('*', { count: 'exact' })
+      .eq('is_published', true);
+
+    if (module_id) {
+      query = query.eq('module_id', module_id);
+    }
+
+    if (search) {
+      const searchTerm = `%${search}%`;
+      query = query.or(`title.ilike.${searchTerm},slug.ilike.${searchTerm}`);
+    }
+
+    query = query.order('order_index', { ascending: true });
+
+    const pageNum = Number(page) || 1;
+    const limitNum = Number(limit) || 50;
+    const from = (pageNum - 1) * limitNum;
+    const to = from + limitNum - 1;
+
+    const { data, count, error } = await query.range(from, to);
+
+    if (error) throw error;
+
+    return sendSuccess(res, 'Daftar pelajaran publik berhasil diambil', {
+      lessons: data as Lesson[],
+      pagination: {
+        total_data: count,
+        total_page: (count && limitNum > 0) ? Math.ceil(count / limitNum) : 1,
+        current_page: pageNum,
+        per_page: limitNum
+      }
+    });
+
+  } catch (error: any) {
+    return sendError(res, 'Gagal mengambil data pelajaran publik', 500, error);
+  }
+};

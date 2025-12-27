@@ -6,13 +6,16 @@ import {
   getLessonById, 
   updateLesson, 
   deleteLesson,
-  getLessonStats
+  getLessonStats,
+  getPublishedLessons
 } from '../controllers/lesson.controller';
 
 const router = Router();
 
-router.post('/', upload.single('content'), createLesson);
+router.get('/published', getPublishedLessons);
 router.get('/stats', getLessonStats);
+
+router.post('/', upload.single('content'), createLesson);
 router.get('/', getAllLessons);
 router.get('/:id', getLessonById);
 router.put('/:id', upload.single('content'), updateLesson);
