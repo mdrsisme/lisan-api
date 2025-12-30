@@ -7,6 +7,7 @@ import courseRoutes from './course.route';
 import moduleRoutes from './module.route';
 import lessonRoutes from './lesson.route';
 import enrollmentRoutes from './enrollment.routes';
+import rankingRoutes from './ranking.routes';
 
 const router = Router();
 
@@ -18,5 +19,6 @@ router.use('/courses', courseRoutes);
 router.use('/modules', moduleRoutes);
 router.use('/lessons', lessonRoutes);
 router.use('/enrollments', enrollmentRoutes);
+router.use('/rankings', rankingRoutes);
 
 export default router;
