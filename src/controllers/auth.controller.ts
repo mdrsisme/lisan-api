@@ -11,6 +11,12 @@ export const register = async (req: Request, res: Response) => {
   try {
     const { full_name, email, password } = req.body;
 
+    // 1. Validasi Input Dasar
+    if (!email || !password || !full_name) {
+      return sendError(res, 'Data tidak lengkap', 400);
+    }
+
+    // 2. Cek apakah email sudah terdaftar
     const { data: existingUser } = await supabase
       .from('users')
       .select('id')
@@ -21,13 +27,21 @@ export const register = async (req: Request, res: Response) => {
       return sendError(res, 'Email sudah terdaftar', 400);
     }
 
+    // 3. Generate Username Unik Otomatis
+    const baseName = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000); 
+    const generatedUsername = `${baseName}${randomSuffix}`;
+
+    // 4. Hash Password
     const password_hash = await hashPassword(password);
 
+    // 5. Insert ke Database
     const { data: newUser, error } = await supabase
       .from('users')
       .insert({
         full_name,
         email,
+        username: generatedUsername,
         password_hash,
         role: 'user',
         is_verified: false,
@@ -38,9 +52,12 @@ export const register = async (req: Request, res: Response) => {
       .single();
 
     if (error || !newUser) {
-      return sendError(res, 'Gagal membuat akun', 500, error);
+      console.error("Supabase Error:", error);
+      // FIX: Menggunakan Optional Chaining (?.) untuk menghindari error 'possibly null'
+      return sendError(res, 'Gagal membuat akun database', 500, error?.message || 'Unknown database error');
     }
 
+    // 6. Generate Token Email
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = getExpiryDate(1); 
 
@@ -51,34 +68,47 @@ export const register = async (req: Request, res: Response) => {
       expires_at: expiresAt
     });
 
+    // 7. Kirim Email via Brevo
     await sendEmailVerification(email, full_name, code);
 
+    // 8. Return Response
     const userResponse = { ...newUser };
     delete (userResponse as any).password_hash;
 
-    return sendSuccess(res, 'Registrasi berhasil, silakan cek email untuk verifikasi', userResponse, 201);
-  } catch (error) {
-    return sendError(res, 'Terjadi kesalahan server', 500, error);
+    return sendSuccess(res, 'Registrasi berhasil, silakan cek email', userResponse, 201);
+
+  } catch (error: any) {
+    console.error("Server Error:", error);
+    return sendError(res, 'Terjadi kesalahan server', 500, error?.message || error);
   }
 };
 
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    // Terima input bisa berupa 'email', 'username', atau field umum 'identifier'
+    const { email, username, identifier, password } = req.body;
+    
+    // Tentukan kunci login (prioritas: identifier -> email -> username)
+    const loginKey = identifier || email || username;
 
+    if (!loginKey || !password) {
+        return sendError(res, 'Email/Username dan Password wajib diisi', 400);
+    }
+
+    // FIX: Gunakan .or() untuk mencari di kolom email ATAU username
     const { data: user, error } = await supabase
       .from('users')
       .select('*')
-      .eq('email', email)
+      .or(`email.eq.${loginKey},username.eq.${loginKey}`) 
       .single();
 
     if (error || !user) {
-      return sendError(res, 'Email atau password salah', 401);
+      return sendError(res, 'Akun tidak ditemukan atau password salah', 401);
     }
 
     const isMatch = await comparePassword(password, user.password_hash);
     if (!isMatch) {
-      return sendError(res, 'Email atau password salah', 401);
+      return sendError(res, 'Akun tidak ditemukan atau password salah', 401);
     }
 
     const payload = { id: user.id, role: user.role, email: user.email };
