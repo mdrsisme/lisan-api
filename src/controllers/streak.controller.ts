@@ -41,6 +41,18 @@ export const getStreakByUserId = async (req: Request, res: Response) => {
       .eq('user_id', userId)
       .single();
 
+    // PERBAIKAN: Handle jika data tidak ditemukan (User belum punya history streak)
+    if (error && error.code === 'PGRST116') {
+        return sendSuccess(res, 'User streak retrieved (default)', {
+            user_id: userId,
+            current_streak: 0,
+            longest_streak: 0,
+            last_activity_date: null,
+            freeze_count: 0
+        });
+    }
+
+    // Jika error lain (koneksi putus, dll), lempar error
     if (error) throw error;
 
     return sendSuccess(res, 'User streak retrieved', data);
