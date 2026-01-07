@@ -1,21 +1,27 @@
 import { Router } from 'express';
-import { upload } from '../config/cloudinary';
-import * as DictController from '../controllers/dictionary.controller';
+import {
+  getCategories,
+  getCategoryBySlug,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  getItemsByCategory,
+  createSignItem,
+  updateSignItem,
+  deleteSignItem
+} from '../controllers/dictionary.controller';
 
 const router = Router();
 
-router.get('/', DictController.getAllDictionaries);
-router.get('/:id', DictController.getDictionaryById);
-router.get('/:dictionaryId/items', DictController.getItemsByDictionary);
+router.get('/categories', getCategories);
+router.get('/categories/:slug', getCategoryBySlug);
+router.post('/categories', createCategory);
+router.put('/categories/:id', updateCategory);
+router.delete('/categories/:id', deleteCategory);
 
-router.post('/', upload.single('thumbnail'), DictController.createDictionary);
-router.patch('/:id', upload.single('thumbnail'), DictController.updateDictionary);
-router.delete('/:id', DictController.deleteDictionary);
-
-router.post('/items', 
-  upload.fields([{ name: 'video', maxCount: 1 }, { name: 'image', maxCount: 1 }]), 
-  DictController.createDictionaryItem
-);
-router.delete('/items/:id', DictController.deleteDictionaryItem);
+router.get('/items/:categoryId', getItemsByCategory);
+router.post('/items', createSignItem);
+router.put('/items/:id', updateSignItem);
+router.delete('/items/:id', deleteSignItem);
 
 export default router;

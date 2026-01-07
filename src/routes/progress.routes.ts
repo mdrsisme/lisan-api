@@ -1,11 +1,14 @@
 import { Router } from 'express';
-import * as LearnController from '../controllers/learning.controller';
+import { 
+  getUserProgress, 
+  updateProgress, 
+  updateStreak 
+} from '../controllers/progress.controller';
 
 const router = Router();
 
-router.get('/due', LearnController.getDueItems);
-router.post('/submit', LearnController.submitQuizResult);
-router.get('/progress/:dictionaryId', LearnController.getDictionaryProgress);
-router.get('/stats', LearnController.getUserStats);
+router.get('/:userId', getUserProgress);
+router.post('/submit', updateProgress);
+router.post('/streak/update', updateStreak);
 
 export default router;

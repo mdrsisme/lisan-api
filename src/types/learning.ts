@@ -1,40 +1,47 @@
-export type QuizType = 'recognition' | 'production_camera' | 'flashcard';
+export type DifficultyLevel = 'easy' | 'medium' | 'hard';
+export type LearningStatus = 'new' | 'learning' | 'mastered';
 
-export interface UserItemProgress {
+export interface Category {
   id: string;
-  user_id: string;
-  dictionary_item_id: string;
-  is_completed: boolean;
-  mastery_level: number;
-  streak_count: number;
-  last_reviewed_at: string | null;
-  next_review_at: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  thumbnail_url: string | null;
+  order_index: number;
+  xp_reward: number;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
 
-export interface UserQuizLog {
+export interface SignItem {
+  id: string;
+  category_id: string;
+  word: string;
+  definition: string | null;
+  hint_text: string | null;
+  video_url: string;
+  image_url: string | null;
+  difficulty: DifficultyLevel;
+  xp_reward: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserProgress {
   id: string;
   user_id: string;
-  dictionary_item_id: string;
-  type: QuizType;
-  is_correct: boolean;
-  ai_confidence_score: number | null;
-  xp_earned: number;
+  sign_item_id: string;
+  status: LearningStatus;
+  highest_accuracy: number;
+  attempts_count: number;
+  last_practiced_at: string;
   created_at: string;
+  updated_at: string;
 }
 
-export interface QuizSubmissionRequest {
-  dictionary_item_id: string;
-  quiz_type: QuizType;
-  is_correct: boolean;
-  ai_confidence_score?: number;
-}
+export type CreateCategoryPayload = Omit<Category, 'id' | 'created_at' | 'updated_at'>;
+export type UpdateCategoryPayload = Partial<CreateCategoryPayload>;
 
-export interface QuizResultResponse {
-  xp_earned: number;
-  is_level_up: boolean;
-  new_level: number;
-  new_total_xp: number;
-  item_progress: UserItemProgress;
-}
+export type CreateSignItemPayload = Omit<SignItem, 'id' | 'created_at' | 'updated_at'>;
+export type UpdateSignItemPayload = Partial<CreateSignItemPayload>;

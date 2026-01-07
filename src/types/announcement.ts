@@ -9,7 +9,6 @@ export interface Announcement {
   updated_at: string;
 }
 
-// Tipe untuk payload update (semua opsional)
 export interface UpdateAnnouncementPayload {
   title?: string;
   content?: string;
