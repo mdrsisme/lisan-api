@@ -1,106 +1,81 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/database';
 import { sendSuccess, sendError } from '../utils/apiResponse';
-import { UserProgress } from '../types/learning';
 
-export const getUserProgress = async (req: Request, res: Response) => {
+export const getDashboardSummary = async (req: Request, res: Response) => {
   try {
-    const { userId } = req.params;
-    const { data, error } = await supabase
-      .from('user_progress')
-      .select(`
-        *,
-        sign_items ( word, difficulty, xp_reward )
-      `)
-      .eq('user_id', userId);
+    const userId = (req as any).user.id;
 
-    if (error) throw error;
-    return sendSuccess(res, 'User progress fetched successfully', data);
-  } catch (error: any) {
-    return sendError(res, 'Failed to fetch user progress', 500, error.message);
-  }
-};
-
-export const updateProgress = async (req: Request, res: Response) => {
-  try {
-    const { user_id, sign_item_id, accuracy } = req.body;
-
-    const { data: existing } = await supabase
-      .from('user_progress')
-      .select('*')
-      .eq('user_id', user_id)
-      .eq('sign_item_id', sign_item_id)
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('xp, level')
+      .eq('id', userId)
       .single();
 
-    let result;
-    const isMastered = accuracy >= 85;
-    const newStatus = isMastered ? 'mastered' : 'learning';
-    const timestamp = new Date().toISOString();
+    if (userError) throw userError;
 
-    if (existing) {
-      const bestAccuracy = Math.max(existing.highest_accuracy, accuracy);
-      const { data, error } = await supabase
-        .from('user_progress')
-        .update({
-          highest_accuracy: bestAccuracy,
-          attempts_count: existing.attempts_count + 1,
-          status: existing.status === 'mastered' ? 'mastered' : newStatus,
-          last_practiced_at: timestamp
-        })
-        .eq('id', existing.id)
-        .select()
-        .single();
-        
-      if (error) throw error;
-      result = data;
-    } else {
-      const { data, error } = await supabase
-        .from('user_progress')
-        .insert([{
-          user_id,
-          sign_item_id,
-          highest_accuracy: accuracy,
-          attempts_count: 1,
-          status: newStatus,
-          last_practiced_at: timestamp
-        }])
-        .select()
-        .single();
+    const { data: progressData, error: progressError } = await supabase
+      .from('user_dictionary_progress')
+      .select('is_completed, completed_items')
+      .eq('user_id', userId);
 
-      if (error) throw error;
-      result = data;
-    }
+    if (progressError) throw progressError;
 
-    if (isMastered && (!existing || existing.status !== 'mastered')) {
-      const { data: itemData } = await supabase
-        .from('sign_items')
-        .select('xp_reward')
-        .eq('id', sign_item_id)
-        .single();
-        
-      if (itemData) {
-        await supabase.rpc('increment_user_xp', { 
-          user_uuid: user_id, 
-          amount: itemData.xp_reward 
-        });
+    const totalDictionariesCompleted = progressData.filter(p => p.is_completed).length;
+    const totalWordsLearned = progressData.reduce((sum, p) => sum + p.completed_items, 0);
+
+    const { data: streakData } = await supabase
+      .from('user_streaks')
+      .select('current_streak, longest_streak')
+      .eq('user_id', userId)
+      .single();
+
+    return sendSuccess(res, 'Dashboard summary berhasil diambil', {
+      user: {
+        xp: userData.xp,
+        level: userData.level
+      },
+      learning: {
+        words_learned: totalWordsLearned,
+        dictionaries_completed: totalDictionariesCompleted,
+        current_streak: streakData?.current_streak || 0,
+        longest_streak: streakData?.longest_streak || 0
       }
-    }
+    });
 
-    return sendSuccess(res, 'Progress updated successfully', result);
-  } catch (error: any) {
-    return sendError(res, 'Failed to update progress', 500, error.message);
+  } catch (error) {
+    return sendError(res, 'Gagal mengambil summary dashboard', 500, error);
   }
 };
 
-export const updateStreak = async (req: Request, res: Response) => {
+export const getMyLearningProgress = async (req: Request, res: Response) => {
   try {
-    const { userId } = req.body;
+    const userId = (req as any).user.id;
+
     const { data, error } = await supabase
-      .rpc('update_daily_streak', { user_uuid: userId });
+      .from('user_dictionary_progress')
+      .select(`
+        id,
+        progress_percentage,
+        is_completed,
+        completed_items,
+        total_items,
+        last_activity_at,
+        dictionary:dictionaries (
+          id,
+          title,
+          slug,
+          thumbnail_url,
+          category_type
+        )
+      `)
+      .eq('user_id', userId)
+      .order('last_activity_at', { ascending: false });
 
     if (error) throw error;
-    return sendSuccess(res, 'Streak updated successfully', data);
-  } catch (error: any) {
-    return sendError(res, 'Failed to update streak', 500, error.message);
+
+    return sendSuccess(res, 'Data progress belajar berhasil diambil', data);
+  } catch (error) {
+    return sendError(res, 'Gagal mengambil data progress', 500, error);
   }
 };

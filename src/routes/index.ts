@@ -1,21 +1,26 @@
 import { Router } from 'express';
-
-import authRoutes from './auth.route';
-import userRoutes from './user.route';
-import announcementRoutes from './announcement.route';
-
+import authRoutes from './auth.routes';
+import userRoutes from './user.routes';
+import statsRoutes from './stats.routes';
+import announcementRoutes from './announcement.routes';
+import gamificationRoutes from './gamification.routes';
 import dictionaryRoutes from './dictionary.routes';
+import streakRoutes from './streak.routes';
 import progressRoutes from './progress.routes';
-import leaderboardRoutes from './leaderboard.routes';
+import gestureRoutes from './gesture.routes';
+import questRoutes from './quest.routes';
 
 const router = Router();
 
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
+router.use('/stats', statsRoutes);
 router.use('/announcements', announcementRoutes);
-
-router.use('/dictionary', dictionaryRoutes);
+router.use('/gamification', gamificationRoutes);
+router.use('/dictionaries', dictionaryRoutes);
+router.use('/streaks', streakRoutes);
 router.use('/progress', progressRoutes);
-router.use('/leaderboard', leaderboardRoutes);
+router.use('/gestures', gestureRoutes);
+router.use('/quests', questRoutes);
 
 export default router;

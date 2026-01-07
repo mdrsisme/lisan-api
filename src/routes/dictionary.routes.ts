@@ -1,27 +1,18 @@
 import { Router } from 'express';
-import {
-  getCategories,
-  getCategoryBySlug,
-  createCategory,
-  updateCategory,
-  deleteCategory,
-  getItemsByCategory,
-  createSignItem,
-  updateSignItem,
-  deleteSignItem
+import { 
+    getAllDictionaries, 
+    createDictionary, 
+    getItemsByDictionary, 
+    createDictionaryItem 
 } from '../controllers/dictionary.controller';
+import { upload } from '../config/cloudinary';
 
 const router = Router();
 
-router.get('/categories', getCategories);
-router.get('/categories/:slug', getCategoryBySlug);
-router.post('/categories', createCategory);
-router.put('/categories/:id', updateCategory);
-router.delete('/categories/:id', deleteCategory);
+router.get('/', getAllDictionaries);
+router.get('/:dictionaryId/items', getItemsByDictionary);
 
-router.get('/items/:categoryId', getItemsByCategory);
-router.post('/items', createSignItem);
-router.put('/items/:id', updateSignItem);
-router.delete('/items/:id', deleteSignItem);
+router.post('/', upload.single('thumbnail'), createDictionary);
+router.post('/items', upload.single('image'), createDictionaryItem);
 
 export default router;

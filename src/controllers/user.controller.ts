@@ -1,238 +1,115 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/database';
-import { hashPassword } from '../utils/password';
 import { sendSuccess, sendError } from '../utils/apiResponse';
-import { User } from '../types/user';
-import { calculateNextLevelProgress } from '../utils/gameMechanics';
+import { hashPassword } from '../utils/password';
 
-const sanitizeUser = (user: User): any => {
-  const { password_hash, ...userWithoutPassword } = user;
-  return {
-    ...userWithoutPassword,
-    level_progress: calculateNextLevelProgress(user.xp || 0)
-  };
-};
-
-export const getMyProfile = async (req: Request, res: Response) => {
+export const getAllUsers = async (req: Request, res: Response) => {
   try {
-    const userId = req.body.user_id || req.query.user_id;
-    if (!userId) return sendError(res, "User ID tidak ditemukan", 400);
-
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single();
-
-    if (error || !user) return sendError(res, "User tidak ditemukan", 404);
-
-    return sendSuccess(res, "Profil berhasil diambil", sanitizeUser(user as User));
-  } catch (error: any) {
-    return sendError(res, "Gagal mengambil profil", 500, error.message);
-  }
-};
-
-export const updateMyProfile = async (req: Request, res: Response) => {
-  try {
-    const userId = req.body.user_id;
-    const { full_name, username, email, password } = req.body;
+    const { page = 1, limit = 10, search, sort = 'created_at', order = 'desc', role, is_premium } = req.query;
     
-    const updateData: any = {};
-
-    if (full_name) updateData.full_name = full_name;
-    if (username) updateData.username = username;
-    if (email) updateData.email = email;
-    
-    if (req.file) {
-      updateData.avatar_url = req.file.path; 
-    }
-
-    if (password) {
-      updateData.password_hash = await hashPassword(password);
-    }
-
-    if (Object.keys(updateData).length === 0 && !req.file) {
-      return sendError(res, 'Tidak ada data yang diubah', 400);
-    }
-
-    updateData.updated_at = new Date().toISOString();
-
-    const { data, error } = await supabase
-      .from('users')
-      .update(updateData)
-      .eq('id', userId)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    return sendSuccess(res, 'Profil berhasil diperbarui', sanitizeUser(data as User));
-
-  } catch (error: any) {
-    return sendError(res, 'Gagal memperbarui profil', 500, error.message);
-  }
-};
-
-export const deleteMyAccount = async (req: Request, res: Response) => {
-  try {
-    const userId = req.body.user_id;
-    if (!userId) return sendError(res, "User ID wajib dikirim", 400);
-    const { error } = await supabase.from('users').delete().eq('id', userId);
-    if (error) throw error;
-    return sendSuccess(res, 'Akun Anda berhasil dihapus');
-  } catch (error: any) {
-    return sendError(res, 'Gagal menghapus akun Anda', 500, error);
-  }
-};
-
-export const getUsers = async (req: Request, res: Response) => {
-  try {
-    const { 
-      search, role, sortBy = 'created_at', order = 'desc', 
-      page = 1, limit = 10, is_premium, is_verified
-    } = req.query;
-
+    const offset = (Number(page) - 1) * Number(limit);
     let query = supabase.from('users').select('*', { count: 'exact' });
 
     if (search) {
-      const searchTerm = `%${search}%`;
-      query = query.or(`email.ilike.${searchTerm},username.ilike.${searchTerm},full_name.ilike.${searchTerm}`);
+      query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,username.ilike.%${search}%`);
     }
 
-    if (role) query = query.eq('role', role);
-    if (is_premium) query = query.eq('is_premium', is_premium === 'true');
-    if (is_verified) query = query.eq('is_verified', is_verified === 'true');
+    if (role) {
+      query = query.eq('role', role);
+    }
 
-    const allowedSorts = ['created_at', 'updated_at', 'level', 'xp', 'username', 'email', 'full_name'];
-    const sortField = allowedSorts.includes(sortBy as string) ? (sortBy as string) : 'created_at';
-    query = query.order(sortField, { ascending: order === 'asc' });
+    if (is_premium) {
+      query = query.eq('is_premium', is_premium === 'true');
+    }
 
-    const pageNum = Number(page) || 1;
-    const limitNum = Number(limit) || 10;
-    const from = (pageNum - 1) * limitNum;
-    const to = from + limitNum - 1;
-    
-    const { data, count, error } = await query.range(from, to);
+    query = query
+      .order(String(sort), { ascending: order === 'asc' })
+      .range(offset, offset + Number(limit) - 1);
+
+    const { data, error, count } = await query;
 
     if (error) throw error;
 
-    const users = (data as User[]).map(sanitizeUser);
-
-    return sendSuccess(res, 'Data pengguna berhasil diambil', {
-      data: users,
-      meta: {
+    return sendSuccess(res, 'Data users berhasil diambil', {
+      users: data,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
         total_data: count,
-        current_page: pageNum,
-        per_page: limitNum,
-        total_pages: count ? Math.ceil(count / limitNum) : 0,
-        has_next: count ? to < count - 1 : false,
-        has_prev: pageNum > 1
+        total_page: Math.ceil((count || 0) / Number(limit))
       }
     });
-
-  } catch (error: any) {
-    return sendError(res, 'Gagal mengambil data pengguna', 500, error);
+  } catch (error) {
+    return sendError(res, 'Gagal mengambil data users', 500, error);
   }
 };
 
-export const updateUserAccount = async (req: Request, res: Response) => {
+export const getUserById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { 
-      username, full_name, email, 
-      role, is_verified, is_premium, 
-      password 
-    } = req.body;
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    const updateData: any = {};
+    if (error || !data) return sendError(res, 'User tidak ditemukan', 404);
 
-    if (username) updateData.username = username;
-    if (full_name) updateData.full_name = full_name;
-    if (email) updateData.email = email;
-    if (role) updateData.role = role;
-    if (is_verified !== undefined) updateData.is_verified = is_verified;
-    if (is_premium !== undefined) updateData.is_premium = is_premium;
+    delete (data as any).password_hash;
+    return sendSuccess(res, 'Detail user berhasil diambil', data);
+  } catch (error) {
+    return sendError(res, 'Gagal mengambil detail user', 500, error);
+  }
+};
 
+export const updateUser = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { full_name, username, email, password, is_premium, role } = req.body;
+    const avatar = req.file ? req.file.path : undefined;
+
+    const updates: any = { updated_at: new Date() };
+
+    if (full_name) updates.full_name = full_name;
+    if (username) updates.username = username;
+    if (email) updates.email = email;
+    if (is_premium !== undefined) updates.is_premium = Boolean(is_premium);
+    if (role) updates.role = role;
+    if (avatar) updates.avatar_url = avatar;
+    
     if (password) {
-      updateData.password_hash = await hashPassword(password);
+      updates.password_hash = await hashPassword(password);
     }
-
-    if (Object.keys(updateData).length === 0) {
-      return sendError(res, 'Tidak ada data yang diubah', 400);
-    }
-
-    updateData.updated_at = new Date().toISOString();
 
     const { data, error } = await supabase
       .from('users')
-      .update(updateData)
+      .update(updates)
       .eq('id', id)
       .select()
       .single();
 
     if (error) throw error;
 
-    return sendSuccess(res, 'Akun user berhasil diperbarui', sanitizeUser(data as User));
-
-  } catch (error: any) {
-    return sendError(res, 'Gagal memperbarui akun user', 500, error);
+    delete (data as any).password_hash;
+    return sendSuccess(res, 'Data user berhasil diperbarui', data);
+  } catch (error) {
+    return sendError(res, 'Gagal memperbarui user', 500, error);
   }
 };
 
-export const deleteUserAccount = async (req: Request, res: Response) => {
+export const deleteUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { error } = await supabase.from('users').delete().eq('id', id);
-    if (error) throw error;
-    return sendSuccess(res, 'User berhasil dihapus permanent');
-  } catch (error: any) {
-    return sendError(res, 'Gagal menghapus user', 500, error);
-  }
-};
 
-export const getUserStats = async (req: Request, res: Response) => {
-  try {
-    const [
-      { count: totalUsers },
-      { count: verifiedUsers },
-      { count: premiumUsers },
-      { count: admins },
-      { count: activeUsers } 
-    ] = await Promise.all([
-      supabase.from('users').select('*', { count: 'exact', head: true }),
-      supabase.from('users').select('*', { count: 'exact', head: true }).eq('is_verified', true),
-      supabase.from('users').select('*', { count: 'exact', head: true }).eq('is_premium', true),
-      supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'admin'),
-      supabase.from('users').select('*', { count: 'exact', head: true }).gt('level', 1)
-    ]);
-
-    return sendSuccess(res, 'Statistik pengguna', {
-      total_users: totalUsers || 0,
-      verified_users: verifiedUsers || 0,
-      premium_users: premiumUsers || 0,
-      admins: admins || 0,
-      active_users: activeUsers || 0,
-    });
-
-  } catch (error: any) {
-    return sendError(res, 'Gagal mengambil statistik', 500, error);
-  }
-};
-
-export const getUserProfile = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { data: user, error } = await supabase
+    const { error } = await supabase
       .from('users')
-      .select('*')
-      .eq('id', id)
-      .single();
+      .delete()
+      .eq('id', id);
 
-    if (error || !user) {
-      return sendError(res, 'User tidak ditemukan', 404);
-    }
-    return sendSuccess(res, 'Data user ditemukan', sanitizeUser(user as User));
-  } catch (error: any) {
-    return sendError(res, 'Gagal mengambil data user', 500, error);
+    if (error) throw error;
+
+    return sendSuccess(res, 'User berhasil dihapus');
+  } catch (error) {
+    return sendError(res, 'Gagal menghapus user', 500, error);
   }
 };

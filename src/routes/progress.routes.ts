@@ -1,14 +1,12 @@
 import { Router } from 'express';
-import { 
-  getUserProgress, 
-  updateProgress, 
-  updateStreak 
-} from '../controllers/progress.controller';
+import { getDashboardSummary, getMyLearningProgress } from '../controllers/progress.controller';
+import { authenticate } from '../middleware/auth.middleware';
 
 const router = Router();
 
-router.get('/:userId', getUserProgress);
-router.post('/submit', updateProgress);
-router.post('/streak/update', updateStreak);
+router.use(authenticate);
+
+router.get('/dashboard', getDashboardSummary);
+router.get('/learning-path', getMyLearningProgress);
 
 export default router;
