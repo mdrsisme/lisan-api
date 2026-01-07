@@ -5,7 +5,8 @@ import {
   getAnnouncementById, 
   updateAnnouncement, 
   deleteAnnouncement,
-  getAnnouncementStats 
+  getAnnouncementStats,
+  getAllPublicAnnouncements
 } from '../controllers/announcement.controller';
 import { upload } from '../config/cloudinary';
 
@@ -18,6 +19,7 @@ const uploadFields = upload.fields([
 
 router.get('/stats', getAnnouncementStats);
 router.get('/', getAllAnnouncements);
+router.get('/public', getAllPublicAnnouncements);
 router.get('/:id', getAnnouncementById);
 router.post('/', uploadFields, createAnnouncement);
 router.put('/:id', uploadFields, updateAnnouncement);

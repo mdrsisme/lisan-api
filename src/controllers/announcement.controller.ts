@@ -183,3 +183,49 @@ export const deleteAnnouncement = async (req: Request, res: Response) => {
     return sendError(res, error.message || 'Gagal menghapus pengumuman', 500);
   }
 };
+
+export const getAllPublicAnnouncements = async (req: Request, res: Response) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 10, 
+      search = '', 
+      sort = 'created_at', 
+      order = 'desc' 
+    } = req.query;
+    
+    const offset = (Number(page) - 1) * Number(limit);
+
+    // Query dasar: Select all + Hitung total
+    let query = supabase
+      .from('announcements')
+      .select('*', { count: 'exact' })
+      .eq('is_active', true); // KHUSUS PUBLIK: Hanya ambil yang aktif
+
+    // Filter Pencarian
+    if (search) {
+      query = query.or(`title.ilike.%${search}%,content.ilike.%${search}%`);
+    }
+
+    // Sorting & Pagination
+    query = query
+      .order(String(sort), { ascending: order === 'asc' })
+      .range(offset, offset + Number(limit) - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+
+    return sendSuccess(res, 'Daftar pengumuman publik berhasil diambil', {
+      data: data,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total_data: count || 0,
+        total_page: Math.ceil((count || 0) / Number(limit))
+      }
+    });
+  } catch (error: any) {
+    return sendError(res, error.message || 'Gagal mengambil data pengumuman publik', 500);
+  }
+};
