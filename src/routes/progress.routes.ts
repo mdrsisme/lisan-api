@@ -1,17 +1,13 @@
-import { Router } from 'express';
-import { 
-  addXp, 
-  getMyAchievements,
-  updateLessonProgress, 
-  getUserCourseProgress 
-} from '../controllers/progress.controller';
+import express from 'express';
+import * as ProgressController from '../controllers/progress.controller';
 
-const router = Router();
+const router = express.Router();
 
-router.post('/xp/add', addXp);
-router.get('/achievements', getMyAchievements);
+router.get('/stats', ProgressController.getUserStats);
+router.get('/', ProgressController.getAllProgress);
+router.get('/:dictionaryId', ProgressController.getDictionaryProgress);
 
-router.post('/', updateLessonProgress);
-router.get('/:user_id/:course_id', getUserCourseProgress);
+router.post('/item', ProgressController.toggleItemProgress);
+router.post('/reset', ProgressController.resetProgress);
 
 export default router;
