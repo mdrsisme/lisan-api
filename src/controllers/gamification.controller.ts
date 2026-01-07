@@ -3,6 +3,8 @@ import { supabase } from '../config/database';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import { FormattedRanking, LevelBoundary, UserStreak } from '../types/gamification';
 
+// --- LEVEL BOUNDARIES ---
+
 export const getLevelBoundaries = async (req: Request, res: Response) => {
   try {
     const { data, error } = await supabase
@@ -17,6 +19,8 @@ export const getLevelBoundaries = async (req: Request, res: Response) => {
   }
 };
 
+// --- LEADERBOARD (FIXED COLUMN NAMES) ---
+
 export const getLeaderboard = async (req: Request, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
@@ -24,10 +28,11 @@ export const getLeaderboard = async (req: Request, res: Response) => {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
+    // [FIX] Menggunakan kolom 'xp' dan 'level' sesuai database Anda
     const { data, error, count } = await supabase
       .from('users')
-      .select('id, full_name, username, avatar_url, total_xp, current_level', { count: 'exact' })
-      .order('total_xp', { ascending: false })
+      .select('id, full_name, username, avatar_url, xp, level', { count: 'exact' })
+      .order('xp', { ascending: false }) // Urutkan berdasarkan xp
       .range(from, to);
 
     if (error) throw error;
@@ -37,8 +42,8 @@ export const getLeaderboard = async (req: Request, res: Response) => {
       username: user.username,
       full_name: user.full_name,
       avatar_url: user.avatar_url,
-      xp: user.total_xp || 0,
-      level: user.current_level || 1
+      xp: user.xp || 0,     // Mapping dari kolom xp
+      level: user.level || 1 // Mapping dari kolom level
     }));
 
     return sendSuccess(res, 'Data leaderboard berhasil diambil', {
@@ -51,6 +56,8 @@ export const getLeaderboard = async (req: Request, res: Response) => {
     return sendError(res, 'Gagal mengambil leaderboard', 500, error.message);
   }
 };
+
+// --- STREAK MANAGEMENT ---
 
 export const createStreak = async (req: Request, res: Response) => {
   try {
