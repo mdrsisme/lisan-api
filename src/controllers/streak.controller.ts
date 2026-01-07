@@ -2,43 +2,86 @@ import { Request, Response } from 'express';
 import { supabase } from '../config/database';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 
-// Ambil status streak user saat ini
 export const getMyStreak = async (req: Request, res: Response) => {
   try {
     const user_id = (req as any).user.id;
 
-    // Cek apakah data streak ada, jika tidak buat baru
     let { data, error } = await supabase
       .from('user_streaks')
       .select('*')
       .eq('user_id', user_id)
       .single();
 
-    if (!data) {
+    if (!data && (!error || error.code === 'PGRST116')) {
         const { data: newData, error: newError } = await supabase
             .from('user_streaks')
             .insert({ user_id })
             .select()
             .single();
+        
         if (newError) throw newError;
         data = newData;
+    } else if (error) {
+        throw error;
     }
 
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = not found
-
-    return sendSuccess(res, 'Data streak berhasil diambil', data);
+    return sendSuccess(res, 'Streak data retrieved', data);
   } catch (error) {
-    return sendError(res, 'Gagal mengambil streak', 500, error);
+    return sendError(res, 'Failed to get streak', 500, error);
   }
 };
 
-// Dipanggil saat user menyelesaikan task/lesson harian
+export const getStreakByUserId = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    const { data, error } = await supabase
+      .from('user_streaks')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error) throw error;
+
+    return sendSuccess(res, 'User streak retrieved', data);
+  } catch (error) {
+    return sendError(res, 'Failed to get user streak', 500, error);
+  }
+};
+
+export const getStreakStats = async (req: Request, res: Response) => {
+    try {
+      const user_id = (req as any).user.id;
+  
+      const { data, error } = await supabase
+        .from('user_streaks')
+        .select('*')
+        .eq('user_id', user_id)
+        .single();
+  
+      if (error) throw error;
+
+      // Logic simulation for period stats based on available columns
+      const stats = {
+          day_streak: data.current_streak,
+          week_streak_milestone: Math.floor(data.current_streak / 7),
+          month_streak_milestone: Math.floor(data.current_streak / 30),
+          longest_streak: data.longest_streak,
+          last_active: data.last_activity_date,
+          is_frozen: data.freeze_count > 0
+      };
+  
+      return sendSuccess(res, 'Streak statistics retrieved', stats);
+    } catch (error) {
+      return sendError(res, 'Failed to get streak stats', 500, error);
+    }
+};
+
 export const updateStreak = async (req: Request, res: Response) => {
   try {
     const user_id = (req as any).user.id;
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const today = new Date().toISOString().split('T')[0];
 
-    // Ambil data streak
     let { data: streakData } = await supabase
       .from('user_streaks')
       .select('*')
@@ -46,8 +89,7 @@ export const updateStreak = async (req: Request, res: Response) => {
       .single();
 
     if (!streakData) {
-      // Jika belum ada, buat baru start 1
-      const { data: newData } = await supabase
+      const { data: newData, error: insertError } = await supabase
         .from('user_streaks')
         .insert({ 
             user_id, 
@@ -56,17 +98,17 @@ export const updateStreak = async (req: Request, res: Response) => {
             last_activity_date: today 
         })
         .select().single();
-      return sendSuccess(res, 'Streak dimulai!', newData);
+        
+      if (insertError) throw insertError;
+      return sendSuccess(res, 'Streak started', newData);
     }
 
     const lastActive = streakData.last_activity_date;
     
-    // Jika sudah latihan hari ini, tidak ada update
     if (lastActive === today) {
-        return sendSuccess(res, 'Streak sudah terhitung hari ini', streakData);
+        return sendSuccess(res, 'Streak already updated today', streakData);
     }
 
-    // Hitung selisih hari
     const dateToday = new Date(today);
     const dateLast = new Date(lastActive);
     const diffTime = Math.abs(dateToday.getTime() - dateLast.getTime());
@@ -75,10 +117,20 @@ export const updateStreak = async (req: Request, res: Response) => {
     let newStreak = streakData.current_streak;
     
     if (diffDays === 1) {
-        // Jika selisih 1 hari (kemarin), streak bertambah
         newStreak += 1;
     } else {
-        // Jika lebih dari 1 hari (absen), reset ke 1
+        if (streakData.freeze_count > 0) {
+             const { data: frozenData } = await supabase
+                .from('user_streaks')
+                .update({ 
+                    freeze_count: streakData.freeze_count - 1,
+                    last_activity_date: today,
+                    updated_at: new Date()
+                })
+                .eq('id', streakData.id)
+                .select().single();
+             return sendSuccess(res, 'Streak frozen used', frozenData);
+        }
         newStreak = 1;
     }
 
@@ -98,8 +150,30 @@ export const updateStreak = async (req: Request, res: Response) => {
 
     if (error) throw error;
 
-    return sendSuccess(res, 'Streak diperbarui', updatedData);
+    return sendSuccess(res, 'Streak updated', updatedData);
   } catch (error) {
-    return sendError(res, 'Gagal update streak', 500, error);
+    return sendError(res, 'Failed to update streak', 500, error);
   }
+};
+
+export const resetStreak = async (req: Request, res: Response) => {
+    try {
+        const user_id = (req as any).user.id;
+        
+        const { data, error } = await supabase
+            .from('user_streaks')
+            .update({
+                current_streak: 0,
+                last_activity_date: null,
+                updated_at: new Date()
+            })
+            .eq('user_id', user_id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return sendSuccess(res, 'Streak reset successfully', data);
+    } catch (error) {
+        return sendError(res, 'Failed to reset streak', 500, error);
+    }
 };
