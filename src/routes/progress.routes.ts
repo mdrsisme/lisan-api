@@ -1,13 +1,11 @@
-import express from 'express';
-import * as ProgressController from '../controllers/progress.controller';
+import { Router } from 'express';
+import * as LearnController from '../controllers/learning.controller';
 
-const router = express.Router();
+const router = Router();
 
-router.get('/stats', ProgressController.getUserStats);
-router.get('/', ProgressController.getAllProgress);
-router.get('/:dictionaryId', ProgressController.getDictionaryProgress);
-
-router.post('/item', ProgressController.toggleItemProgress);
-router.post('/reset', ProgressController.resetProgress);
+router.get('/due', LearnController.getDueItems);
+router.post('/submit', LearnController.submitQuizResult);
+router.get('/progress/:dictionaryId', LearnController.getDictionaryProgress);
+router.get('/stats', LearnController.getUserStats);
 
 export default router;

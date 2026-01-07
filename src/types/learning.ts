@@ -31,8 +31,10 @@ export interface QuizSubmissionRequest {
   ai_confidence_score?: number;
 }
 
-export interface LevelBoundary {
-  level: number;
-  min_xp: number;
-  title: string;
+export interface QuizResultResponse {
+  xp_earned: number;
+  is_level_up: boolean;
+  new_level: number;
+  new_total_xp: number;
+  item_progress: UserItemProgress;
 }
