@@ -340,3 +340,49 @@ export const trackItemProgress = async (req: Request, res: Response) => {
     return sendError(res, 'Failed to save progress', 500, error);
   }
 };
+
+export const getItemById = async (req: Request, res: Response) => {
+  try {
+    const { dictionaryId, itemId } = req.params;
+    const userId = (req as any).user?.id;
+
+    const { data, error } = await supabase
+      .from('dictionary_items')
+      .select(`
+        *,
+        ai_model:ai_models (
+            id,
+            model_url,
+            config
+        ),
+        progress:user_item_progress (
+            status, 
+            user_id
+        )
+      `)
+      .eq('dictionary_id', dictionaryId)
+      .eq('id', itemId)
+      .single();
+
+    if (error) throw error;
+    if (!data) return sendError(res, 'Item not found', 404);
+
+    // Format data agar konsisten dengan getItemsByDictionary
+    const userProgress = data.progress?.find((p: any) => p.user_id === userId);
+    const formattedData = {
+      ...data,
+      ai_model_url: data.ai_model?.model_url || null,
+      ai_model_config: data.ai_model?.config || null,
+      is_learned: !!userProgress,
+      status: userProgress ? userProgress.status : 'new'
+    };
+
+    // Hapus raw join data agar clean
+    delete formattedData.progress;
+    delete formattedData.ai_model;
+
+    return sendSuccess(res, 'Dictionary item retrieved', formattedData);
+  } catch (error) {
+    return sendError(res, 'Failed to retrieve item', 500, error);
+  }
+};

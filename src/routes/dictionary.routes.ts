@@ -9,7 +9,8 @@ import {
     createDictionaryItem,
     updateDictionaryItem,
     deleteDictionaryItem,
-    trackItemProgress
+    trackItemProgress,
+    getItemById
 } from '../controllers/dictionary.controller';
 import { upload } from '../config/cloudinary';
 
@@ -22,6 +23,7 @@ router.put('/:id', upload.single('thumbnail'), updateDictionary);
 router.delete('/:id', deleteDictionary);
 
 router.get('/:dictionaryId/items', getItemsByDictionary);
+router.get('/:dictionaryId/items/:itemId', getItemById);
 router.post('/items', upload.single('image'), createDictionaryItem);
 router.put('/items/:itemId', upload.single('image'), updateDictionaryItem);
 router.delete('/items/:itemId', deleteDictionaryItem);
