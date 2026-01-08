@@ -4,6 +4,10 @@ export interface AiModel {
   config: Record<string, any>;
   created_at: string;
   updated_at: string;
+  dictionary_items?: {
+    id: string;
+    word: string;
+  }[];
 }
 
 export interface CreateAiModelDto {

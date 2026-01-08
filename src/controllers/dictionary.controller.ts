@@ -150,7 +150,15 @@ export const getItemsByDictionary = async (req: Request, res: Response) => {
       .from('dictionary_items')
       .select(`
         *,
-        progress:user_item_progress(status, user_id)
+        ai_model:ai_models (
+           id,
+           model_url,
+           config
+        ),
+        progress:user_item_progress (
+           status, 
+           user_id
+        )
       `)
       .eq('dictionary_id', dictionaryId)
       .order('order_index', { ascending: true });
@@ -166,6 +174,8 @@ export const getItemsByDictionary = async (req: Request, res: Response) => {
         const userProgress = item.progress?.find((p: any) => p.user_id === userId);
         return {
             ...item,
+            ai_model_url: item.ai_model?.model_url || null,
+            ai_model_config: item.ai_model?.config || null,
             is_learned: !!userProgress,
             status: userProgress ? userProgress.status : 'new'
         };
@@ -179,7 +189,16 @@ export const getItemsByDictionary = async (req: Request, res: Response) => {
 
 export const createDictionaryItem = async (req: Request, res: Response) => {
   try {
-    const { dictionary_id, word, definition, item_type, target_gesture_data, video_url } = req.body;
+    const { 
+        dictionary_id, 
+        word, 
+        definition, 
+        item_type, 
+        target_gesture_data, 
+        video_url,
+        ai_model_id 
+    } = req.body;
+    
     const image_url = req.file ? req.file.path : null;
 
     const { data, error } = await supabase
@@ -191,6 +210,7 @@ export const createDictionaryItem = async (req: Request, res: Response) => {
         video_url,
         image_url,
         item_type: item_type || 'flashcard',
+        ai_model_id: (ai_model_id && ai_model_id !== 'null') ? ai_model_id : null,
         target_gesture_data
       })
       .select()
@@ -206,12 +226,24 @@ export const createDictionaryItem = async (req: Request, res: Response) => {
 export const updateDictionaryItem = async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
-    const { word, definition, item_type, target_gesture_data, video_url, is_active } = req.body;
+    const { 
+        word, 
+        definition, 
+        item_type, 
+        target_gesture_data, 
+        video_url, 
+        is_active,
+        ai_model_id 
+    } = req.body;
     
     const updates: any = {
         word, definition, item_type, target_gesture_data, video_url,
         updated_at: new Date()
     };
+
+    if (ai_model_id !== undefined) {
+        updates.ai_model_id = (ai_model_id && ai_model_id !== 'null') ? ai_model_id : null;
+    }
 
     if (is_active !== undefined) updates.is_active = is_active;
     if (req.file) updates.image_url = req.file.path;

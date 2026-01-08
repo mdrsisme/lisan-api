@@ -7,7 +7,13 @@ export const getAllAiModels = async (req: Request, res: Response) => {
   try {
     const { data, error } = await supabase
       .from('ai_models')
-      .select('*')
+      .select(`
+        *,
+        dictionary_items (
+          id,
+          word
+        )
+      `)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -23,7 +29,13 @@ export const getAiModelById = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { data, error } = await supabase
       .from('ai_models')
-      .select('*')
+      .select(`
+        *,
+        dictionary_items (
+          id,
+          word
+        )
+      `)
       .eq('id', id)
       .single();
 
@@ -84,6 +96,15 @@ export const updateAiModel = async (req: Request, res: Response) => {
 export const deleteAiModel = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
+    const { count } = await supabase
+        .from('dictionary_items')
+        .select('*', { count: 'exact', head: true })
+        .eq('ai_model_id', id);
+
+    if (count && count > 0) {
+        return sendError(res, 'Model is being used by dictionary items', 400);
+    }
 
     const { error } = await supabase
       .from('ai_models')
